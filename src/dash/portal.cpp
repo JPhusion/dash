@@ -9,6 +9,7 @@
 #include "dash/imu.h"
 #include "dash/log.h"
 #include "dash/power.h"
+#include "dash/esp_now_dash.h"
 #include "dash/games.h"
 #include "dash/ota.h"
 #include "dash/session.h"
@@ -244,6 +245,46 @@ void Portal::begin() {
     n += stats().recentSessionsJson(buf + n, sizeof(buf) - n - 2, 10);
     snprintf(buf + n, sizeof(buf) - n, "}");
     sv->send(200, "application/json", buf);
+  });
+
+  // --- /api/group ---
+  sv->on("/api/group", HTTP_GET, [this, sv]() {
+    lastClientMs_ = millis();
+    char buf[256];
+    int n = snprintf(buf, sizeof(buf),
+                     "{\"running\":%s,\"peers\":[",
+                     espNow().running() ? "true" : "false");
+    for (uint8_t i = 0; i < espNow().peerCount(); i++) {
+      n += snprintf(buf + n, sizeof(buf) - n,
+                    "%s{\"id\":\"%08x\",\"last_seen_ms\":%lu}",
+                    i ? "," : "", (unsigned)espNow().peer(i).deviceId,
+                    (unsigned long)(millis() - espNow().peer(i).lastSeenMs));
+    }
+    snprintf(buf + n, sizeof(buf) - n, "]}");
+    sv->send(200, "application/json", buf);
+  });
+
+  sv->on("/api/group", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    if (!sv->hasArg("plain")) { sv->send(400, "text/plain", "no body"); return; }
+    JsonDocument doc;
+    if (deserializeJson(doc, sv->arg("plain"))) {
+      sv->send(400, "text/plain", "bad json"); return;
+    }
+    String action = doc["action"].as<String>();
+    if (action == "start") {
+      espNow().begin();
+      espNow().sendPresence();
+      sv->send(200, "application/json", "{\"ok\":true}");
+    } else if (action == "stop") {
+      espNow().stop();
+      sv->send(200, "application/json", "{\"ok\":true}");
+    } else if (action == "invite") {
+      espNow().sendRoomInvite();
+      sv->send(200, "application/json", "{\"ok\":true}");
+    } else {
+      sv->send(400, "text/plain", "unknown action");
+    }
   });
 
   // --- /api/game ---

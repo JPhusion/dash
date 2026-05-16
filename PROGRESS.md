@@ -352,6 +352,33 @@
   call them manually for now.
 - Single-cube only (group games come in M11).
 
-## M11..M12
+## M11 — ESP-NOW Multi-Dash ✅ (scaffolding)
 
-(Pending.)
+**Done**
+- `dash::EspNowDash` — minimal multi-cube transport. Broadcasts presence
+  beacons on channel 6, ignores its own broadcasts (deviceId = last 4 MAC
+  bytes), parses incoming `DSH1` magic-prefixed frames in a worker task.
+- Frame protocol: 4-byte magic, type, flags, seq, deviceId, 32-byte payload.
+  Types: Presence / RoomInvite / SessionStart / Heartbeat / SessionEnd.
+- Peer table (up to 8 peers) with last-seen-ms TTL; entries are pruned at
+  10 s of silence.
+- Channel locked at 6 to coexist with the Dash AP. STA-mode operations
+  (M9 OTA) pause ESP-NOW via `stop()` and resume after.
+- Portal `/api/group` GET returns running flag + peer list; POST accepts
+  `start | stop | invite` actions.
+
+**Tested**
+- Build clean. Cannot exercise multi-cube behaviour with only one Dash —
+  scaffolding is committed and ready for the second cube.
+
+**Open issues / deferred**
+- Session-state sync (heartbeat handler) not yet routed into the Session
+  module; the message round-trip is in place but the response is just
+  logged. Adding the "host's timer wins" coordination is a follow-up once
+  a second Dash is available to test against.
+- Encryption + LMK pairing not enabled — relies on the broadcast-only,
+  in-arm's-reach trust model.
+
+## M12 — Polish, Documentation, Final Pass ⏳
+
+(In progress.)
