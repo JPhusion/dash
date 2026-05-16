@@ -146,6 +146,17 @@ void Portal::begin() {
     if (doc["session_minutes"].is<unsigned>()) {
       settings().setSessionLengthMin((uint16_t)(doc["session_minutes"].as<unsigned>()));
     }
+    // Home Wi-Fi credentials piped through here too so the settings card can
+    // edit them after onboarding. Empty string is treated as "no change" so
+    // the user doesn't accidentally clear creds by leaving the field blank.
+    if (doc["home_ssid"].is<const char*>()) {
+      String s = doc["home_ssid"].as<String>();
+      if (s.length() > 0) settings().setHomeWifiSsid(s);
+    }
+    if (doc["home_password"].is<const char*>()) {
+      String p = doc["home_password"].as<String>();
+      if (p.length() > 0) settings().setHomeWifiPassword(p);
+    }
     log::info(kTag, "config updated");
     sv->send(200, "application/json", "{\"ok\":true}");
   });
