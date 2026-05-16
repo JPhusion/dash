@@ -165,6 +165,41 @@
 **Tested**
 - Build clean. Will verify boot animation on hardware after the next upload.
 
-## M5..M12
+## M5 — WiFi AP & Captive Portal ✅
+
+**Done**
+- `dash::WifiAp` — softAP on channel 6 at 11 dBm TX, open SSID `Dash-XXXX`
+  (last 4 MAC hex). `WiFi.setSleep(false)` for snappy portal once a phone is
+  associated. DNS server task + HTTP server task both pinned to core 0 so
+  rendering on core 1 stays untouched.
+- `dash::Portal` — request handlers for `/api/status`, `/api/time-sync`,
+  `/api/config` (GET/POST). Captive-portal probe paths
+  (`/generate_204`, `/hotspot-detect.html`, etc.) 302 to `/`. Static fallback
+  serves `/web/*` from LittleFS.
+- `dash::Settings` — NVS-backed config: device name, audio volume, sleep
+  timeout, session length, home Wi-Fi credentials, last unix + tz, onboarded
+  flag. Module owns its `Preferences` instance and serialises through it.
+- Web frontend (`data/web/`): vanilla HTML/CSS/JS, dark-mode, mobile-first.
+  3 cards (Home, Settings, Stats), session start/end buttons, progress bar.
+  8.5 KiB total, well under the 500 KiB budget.
+- Main loop boots the AP after settings; portal routes register against the
+  WebServer that WifiAp owns.
+
+**Tested**
+- Hardware: AP comes up; serial logs `AP up: Dash-21A4 @ 192.168.4.1 (ch 6,
+  11 dBm)` and `Portal routes registered`. Free heap drops from 248 KB to
+  136 KB after WiFi stack init — expected.
+- Web assets served via `python3 -m http.server 8765` locally:
+  `index.html` 1.8 KB, `styles.css` 2.5 KB, `app.js` 4.3 KB — all 200 OK.
+- Did NOT connect to Dash's own AP (would lose internet); will verify on
+  hardware in the morning.
+
+**Open issues / deferred**
+- `/api/session` / `/api/stats` endpoints registered in `app.js` but the
+  C++ handler returns 404 until M6/M7 land.
+- No QR code on OLED yet — `Display::showQR` is an ASCII placeholder. A real
+  QR library will be pulled in during M8 (onboarding).
+
+## M6..M12
 
 (Pending.)

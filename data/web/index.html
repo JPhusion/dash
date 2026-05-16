@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e1116">
+  <title>Dash</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div class="logo">●&nbsp;Dash</div>
+    <div class="status" id="status-pill">connecting…</div>
+  </header>
+
+  <main>
+    <section class="card" id="home-card">
+      <h2 id="device-name">Dash</h2>
+      <p class="subtle" id="device-state">checking in…</p>
+
+      <div class="actions">
+        <button class="primary" id="btn-start-session">Start session</button>
+        <button id="btn-end-session" hidden>End session</button>
+      </div>
+
+      <div id="session-progress" hidden>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="row">
+          <span id="session-elapsed">0:00</span>
+          <span id="session-total">25:00</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Settings</h3>
+      <label>Device name <input id="cfg-name" maxlength="16"></label>
+      <label>Volume <input id="cfg-volume" type="range" min="0" max="100"></label>
+      <label>Sleep after (min) <input id="cfg-sleep-min" type="number" min="1" max="10"></label>
+      <label>Session length (min) <input id="cfg-session-min" type="number" min="5" max="120"></label>
+      <button id="btn-save-config">Save</button>
+    </section>
+
+    <section class="card">
+      <h3>Stats</h3>
+      <p id="stats-summary" class="subtle">no sessions yet</p>
+    </section>
+
+    <footer class="subtle" id="footer">firmware vX</footer>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

@@ -16,11 +16,14 @@
 #include "dash/idle_manager.h"
 #include "dash/imu.h"
 #include "dash/log.h"
+#include "dash/portal.h"
 #include "dash/power.h"
 #include "dash/reset_reason.h"
+#include "dash/settings.h"
 #include "dash/sounds.h"
 #include "dash/state_machine.h"
 #include "dash/touch.h"
+#include "dash/wifi_ap.h"
 
 static uint32_t g_lastHeartbeatMs = 0;
 static uint32_t g_faceDownSinceMs = 0;
@@ -129,10 +132,22 @@ void setup() {
   dash::character().begin();
   dash::character().start();
 
+  // Settings (NVS) up front so other modules can read.
+  dash::settings().begin();
+
+  // Audio volume from settings (silent override stays under DASH_SILENT_AUDIO).
+  dash::audio().setVolume(dash::settings().audioVolume());
+
   // State machine + idle manager.
   dash::stateMachine().transitionTo(dash::DeviceState::Idle);
+  dash::idleManager().setSleepTimeoutSec(dash::settings().sleepTimeoutSec());
   dash::idleManager().begin();
   dash::idleManager().start();
+
+  // WiFi AP + captive portal.
+  if (dash::wifiAp().start()) {
+    dash::portal().begin();
+  }
 
   // Boot chime + animation (chime silent under DASH_SILENT_AUDIO).
   dash::sounds::play(dash::sounds::kBoot);
