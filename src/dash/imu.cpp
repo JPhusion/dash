@@ -88,9 +88,12 @@ void Imu::writeMpu(uint8_t reg, uint8_t val) {
 }
 
 bool Imu::begin() {
-  // Wire is set up by Display::begin(); just make sure it's actually up.
-  if (!Wire.begin(pins::I2C_SDA, pins::I2C_SCL, pins::I2C_FREQ_HZ)) {
-    // Already begun is fine.
+  // Wire is already brought up by Display::begin() via u8g2. We only call
+  // Wire.begin() ourselves if Display didn't run first (e.g., a future code
+  // path that uses the IMU headless). The Arduino Wire library warns when
+  // begin() is called twice, so check before calling.
+  if (Wire.getClock() == 0) {
+    Wire.begin(pins::I2C_SDA, pins::I2C_SCL, pins::I2C_FREQ_HZ);
   }
   uint8_t who = 0;
   if (!readMpu(kRegWhoAmI, &who, 1)) {
@@ -110,8 +113,13 @@ bool Imu::begin() {
 }
 
 void Imu::loadBiasFromNvs() {
+  // Preferences::begin() with readonly=true logs an [E] when the namespace
+  // doesn't exist yet (first boot). We suppress by checking, then opening
+  // read-write to create the namespace silently.
   Preferences p;
   if (!p.begin("dash.imu", true)) {
+    // Create empty namespace so subsequent reads are quiet.
+    if (p.begin("dash.imu", false)) p.end();
     log::debug(kTag, "no NVS bias yet");
     return;
   }

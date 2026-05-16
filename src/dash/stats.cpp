@@ -17,9 +17,14 @@ Stats* g_singleton = nullptr;
 Stats::Stats() {}
 
 bool Stats::begin() {
-  if (!LittleFS.begin(true)) {
-    log::error(kTag, "fs mount failed");
-    return false;
+  // Audio module mounts LittleFS first; double-mount here is benign but the
+  // Arduino-ESP32 LittleFS wrapper warns. Skip if already mounted by checking
+  // an arbitrary path.
+  if (!LittleFS.exists("/")) {
+    if (!LittleFS.begin(true)) {
+      log::error(kTag, "fs mount failed");
+      return false;
+    }
   }
   if (!LittleFS.exists("/stats")) LittleFS.mkdir("/stats");
   return true;

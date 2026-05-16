@@ -22,6 +22,8 @@ Audio* g_singleton = nullptr;
 bool littlefsMounted = false;
 bool ensureFs() {
   if (littlefsMounted) return true;
+  // LittleFS may already be mounted by another module (Stats). Calling
+  // begin() twice is safe and silent because we cache the flag.
   if (!LittleFS.begin(true)) {
     log::error(kTag, "LittleFS mount failed");
     return false;
