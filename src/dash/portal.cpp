@@ -12,6 +12,7 @@
 #include "dash/session.h"
 #include "dash/settings.h"
 #include "dash/state_machine.h"
+#include "dash/stats.h"
 #include "dash/wifi_ap.h"
 
 namespace dash {
@@ -189,6 +190,23 @@ void Portal::begin() {
     } else {
       sv->send(400, "text/plain", "unknown action");
     }
+  });
+
+  // --- /api/stats ---
+  sv->on("/api/stats", HTTP_GET, [this, sv]() {
+    lastClientMs_ = millis();
+    auto s = stats().summary();
+    char buf[2048];
+    int n = snprintf(buf, sizeof(buf),
+        "{\"total_sessions\":%u,\"completed_sessions\":%u,"
+        "\"total_focused_sec\":%u,\"total_distractions\":%u,"
+        "\"best_single_sec\":%u,\"recent\":",
+        s.totalSessions, s.completedSessions,
+        (unsigned)s.totalFocusedSec, s.totalDistractions,
+        (unsigned)s.bestSingleSec);
+    n += stats().recentSessionsJson(buf + n, sizeof(buf) - n - 2, 10);
+    snprintf(buf + n, sizeof(buf) - n, "}");
+    sv->send(200, "application/json", buf);
   });
 
   // --- Static file fallback / root ---

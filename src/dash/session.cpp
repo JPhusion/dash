@@ -5,8 +5,10 @@
 #include "dash/display.h"
 #include "dash/idle_manager.h"
 #include "dash/log.h"
+#include "dash/settings.h"
 #include "dash/sounds.h"
 #include "dash/state_machine.h"
+#include "dash/stats.h"
 
 namespace dash {
 
@@ -78,6 +80,17 @@ void Session::resume() {
 void Session::stop(bool celebrate) {
   if (state_ == SessionState::Idle) return;
   log::info(kTag, "stop (celebrate=%d distractions=%u)", (int)celebrate, distractions_);
+
+  // Record stats before tearing down state.
+  uint32_t elapsedMs = (millis() - startedAtMs_) - accumulatedPauseMs_;
+  SessionRecord r{};
+  r.startedUnix    = settings().lastUnix();   // best-effort wall clock
+  r.targetMin      = targetMin_;
+  r.actualSec      = (uint16_t)(elapsedMs / 1000UL);
+  r.distractions   = distractions_;
+  r.completed      = celebrate ? 1 : 0;
+  stats().append(r);
+
   enterState(SessionState::Idle);
   rtcSessionDirty = 0;
   character().setMood(Mood::Neutral);

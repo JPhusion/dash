@@ -64,6 +64,24 @@ async function refreshSession() {
   } catch (e) { /* session API may not be wired until M6 */ }
 }
 
+async function refreshStats() {
+  try {
+    const s = await api("/api/stats");
+    const total = s.total_sessions || 0;
+    if (total === 0) {
+      $("stats-summary").textContent = "no sessions yet";
+      return;
+    }
+    const focusedMin = Math.round((s.total_focused_sec || 0) / 60);
+    const best = Math.round((s.best_single_sec || 0) / 60);
+    $("stats-summary").innerHTML =
+      `<b>${s.completed_sessions}/${total}</b> completed · ` +
+      `<b>${focusedMin}</b> min focused · ` +
+      `<b>${s.total_distractions}</b> distractions · ` +
+      `best <b>${best}</b> min`;
+  } catch (e) {}
+}
+
 function describeState(s) {
   if (!s) return "—";
   return `${s.state} · ${s.face}`;
@@ -142,8 +160,10 @@ async function boot() {
   await refreshStatus();
   await refreshConfig();
   await refreshSession();
+  await refreshStats();
   setInterval(refreshStatus, 4000);
   setInterval(refreshSession, 3000);
+  setInterval(refreshStats, 15000);
 }
 
 boot();

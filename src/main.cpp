@@ -23,6 +23,7 @@
 #include "dash/settings.h"
 #include "dash/sounds.h"
 #include "dash/state_machine.h"
+#include "dash/stats.h"
 #include "dash/touch.h"
 #include "dash/wifi_ap.h"
 
@@ -145,7 +146,8 @@ void setup() {
   dash::idleManager().begin();
   dash::idleManager().start();
 
-  // Session controller.
+  // Stats + session controller.
+  dash::stats().begin();
   dash::session().begin();
 
   // WiFi AP + captive portal.

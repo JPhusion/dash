@@ -235,6 +235,34 @@
   with stats logging.
 - Crash-recovery prompt not yet rendered in the portal UI.
 
-## M7..M12
+## M7 — Stats & Dashboard ✅
+
+**Done**
+- `dash::Stats` — append-only JSON-lines log at
+  `/stats/sessions.ndjson` on LittleFS. One record per session completion:
+  `{u:startedUnix, tm:targetMin, as:actualSec, d:distractions, c:completed}`.
+- Rotation: when file exceeds 64 KiB, oldest half is dropped (rounded up to
+  the next newline) so the device never runs out of flash from accumulated
+  session logs.
+- `Stats::summary()` walks the file and computes totalSessions /
+  completedSessions / totalFocusedSec / totalDistractions / bestSingleSec.
+  Streak math is left as a follow-up (timezone-aware logic deferred).
+- `Stats::recentSessionsJson()` returns the last N (default 10) raw records
+  as a JSON array for the portal.
+- `Session::stop()` writes a record before clearing state.
+- Portal `/api/stats` exposes both the aggregate and the recent-array.
+- Frontend `app.js` polls `/api/stats` every 15 s and renders a one-line
+  summary on the dashboard.
+
+**Tested**
+- Build clean. Stats file format roundtrip not yet exercised on hardware
+  (needs at least one session to complete first).
+
+**Open issues / deferred**
+- Streak days computation deferred (needs tz-aware "same day" check).
+- DNS-based distraction detection still not wired; without it, distractions
+  count stays 0 across all sessions.
+
+## M8..M12
 
 (Pending.)
