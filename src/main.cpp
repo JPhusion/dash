@@ -13,6 +13,7 @@
 #include "dash/build_info.h"
 #include "dash/character.h"
 #include "dash/display.h"
+#include "dash/games.h"
 #include "dash/idle_manager.h"
 #include "dash/imu.h"
 #include "dash/log.h"
@@ -153,9 +154,10 @@ void setup() {
   dash::idleManager().begin();
   dash::idleManager().start();
 
-  // Stats + session controller.
+  // Stats + session controller + games.
   dash::stats().begin();
   dash::session().begin();
+  dash::games().begin();
 
   // WiFi AP + captive portal.
   if (dash::wifiAp().start()) {

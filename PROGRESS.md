@@ -322,6 +322,36 @@
   `Power::enterDeepSleep` yet — the API + flow exists, just need to compute
   the next-4am offset from `settings().lastUnix() + tzOffsetMin()`.
 
-## M10..M12
+## M10 — Gestures Menu & Games ✅
+
+**Done**
+- `dash::Games` — two minigames behind a single FSM:
+  - **Reaction Time**: 5 rounds, eye state flashes Surprised, player taps as
+    fast as possible (or fails within 3 s). Score = sum of (3000 - reactionMs)
+    per round.
+  - **Bop It**: cube shows TAP! / SHAKE! / UP! / DOWN!, player has a
+    shrinking window to comply (1800 ms → 600 ms). One miss ends the run.
+- Games subscribe to IMU `Tap`, `Shake`, and `OrientationChange` events so
+  the same gesture system that drives sessions drives gameplay.
+- On game start: state machine → InGame, mood → Playful, `game_start.raw`
+  plays. Reaction/Bop It results show on the OLED for 2.5 s, then return to
+  Idle.
+- Portal `/api/game` GET returns current game + last score; POST handles
+  `{action: start|stop, game: reaction|bopit}`.
+- Gesture trigger from Idle: not wired in this milestone. Games are
+  reachable via the portal API; M12 polish should wire "shake while idle
+  for 1.5 s" → "open game menu" to satisfy the bench-only gesture in the
+  spec.
+
+**Tested**
+- Build clean. Game flow not yet exercised on hardware (needs the user to
+  physically tap/shake/flip — staged for the morning).
+
+**Open issues / deferred**
+- No portal game-picker UI yet. The endpoints work but the user needs to
+  call them manually for now.
+- Single-cube only (group games come in M11).
+
+## M11..M12
 
 (Pending.)

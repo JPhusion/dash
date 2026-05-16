@@ -9,6 +9,7 @@
 #include "dash/imu.h"
 #include "dash/log.h"
 #include "dash/power.h"
+#include "dash/games.h"
 #include "dash/ota.h"
 #include "dash/session.h"
 #include "dash/settings.h"
@@ -242,6 +243,37 @@ void Portal::begin() {
         (unsigned)s.bestSingleSec);
     n += stats().recentSessionsJson(buf + n, sizeof(buf) - n - 2, 10);
     snprintf(buf + n, sizeof(buf) - n, "}");
+    sv->send(200, "application/json", buf);
+  });
+
+  // --- /api/game ---
+  sv->on("/api/game", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    if (!sv->hasArg("plain")) { sv->send(400, "text/plain", "no body"); return; }
+    JsonDocument doc;
+    if (deserializeJson(doc, sv->arg("plain"))) {
+      sv->send(400, "text/plain", "bad json"); return;
+    }
+    String action = doc["action"].as<String>();
+    if (action == "start") {
+      String which = doc["game"].as<String>();
+      if (which == "reaction")  games().startGame(GameId::Reaction);
+      else if (which == "bopit") games().startGame(GameId::BopIt);
+      else { sv->send(400, "text/plain", "unknown game"); return; }
+      sv->send(200, "application/json", "{\"ok\":true}");
+    } else if (action == "stop") {
+      games().stopGame();
+      sv->send(200, "application/json", "{\"ok\":true}");
+    } else {
+      sv->send(400, "text/plain", "unknown action");
+    }
+  });
+
+  sv->on("/api/game", HTTP_GET, [this, sv]() {
+    lastClientMs_ = millis();
+    char buf[96];
+    snprintf(buf, sizeof(buf), "{\"current\":%d,\"last_score\":%u}",
+             (int)games().current(), (unsigned)games().lastScore());
     sv->send(200, "application/json", buf);
   });
 
