@@ -31,6 +31,26 @@ Captured `/tmp/dash-audit.log` over 60 s with the cube idle on the desk.
 - No second Dash on hand to exercise ESP-NOW peer discovery.
 - OTA path can't be tested without a real GitHub release.
 
+## Final 3-minute stability test (post-M12)
+
+Captured `/tmp/dash-180s.log` over 170+ seconds with the cube idle on the
+desk and the final M12 build flashed (audio enabled, no deep sleep).
+
+- Free heap: **127868 bytes constant** for the entire run. Zero drift across
+  all the modules running concurrently: render task at 30 fps, IMU at 100
+  Hz, audio task idle, touch task at 33 Hz, Wi-Fi AP up, DNS server, HTTP
+  server, ESP-NOW worker, character idle quirks, session tick, idle
+  manager tick.
+- Touch baseline drift between 81 and 82 (1 LSB noise — expected on USB
+  power) — auto-recalibration fires every 30 s as designed.
+- IMU pitch holds at -2.7 to -3.4°, roll at -29.5 to -29.9° (cube on its
+  side, stable readings).
+- Zero panics, zero watchdog warnings, zero stack canary trips.
+- All three build envs (`dash`, `dash-debug`, `dash-release`) build clean
+  with zero warnings.
+
+Verdict: **stable for handover.**
+
 ## Style / consistency observations
 
 - Module structure is consistent: every dash:: module is one `.h` + one `.cpp`,
