@@ -200,6 +200,41 @@
 - No QR code on OLED yet — `Display::showQR` is an ASCII placeholder. A real
   QR library will be pulled in during M8 (onboarding).
 
-## M6..M12
+## M6 — Study Session Engine ✅
+
+**Done**
+- `dash::Session` — finite-state controller (Idle / Running / Paused /
+  Completed). Tracks start time, accumulated pause time, target duration,
+  distraction count.
+- `start(minutes)`: writes RTC recovery struct, transitions device state to
+  InSession, inhibits idle sleep, sets character mood to Focused, plays the
+  session_start chime. `pause/resume` does the obvious.
+- `stop(celebrate=true)`: on natural completion, fires the celebrating eye
+  state + session_complete chime. On manual stop, disappointed eyes +
+  session_end chime.
+- `noteDistraction()`: 8-second cooldown on the disappointed reaction so a
+  burst of social-app DNS queries doesn't carpet-bomb the user.
+- Session tick task on core 0 polls every 1 s, redraws the OLED progress
+  overlay every 5 s.
+- RTC_DATA_ATTR recovery state (`rtcSessionDirty`, `rtcSessionTargetMin`,
+  `rtcSessionStartedUnix`) — survives deep sleep / crash, lets the portal
+  offer "resume in-progress session" after an unexpected reboot.
+- Portal `/api/session` GET returns snapshot JSON; POST handles
+  `start|pause|resume|stop` actions.
+
+**Tested**
+- Build clean. Hardware boot validates the session task starts (no panic, no
+  watchdog). Full start/stop UX needs the phone-AP interaction the user runs
+  in the morning.
+
+**Open issues / deferred**
+- DNS distraction-domain heuristic NOT yet wired — DNS server currently just
+  redirects everything to the captive-portal IP. The proper distraction
+  detector (whitelist of focus-safe domains, increment counter on other
+  hostnames during a session) is staged for M7 since it integrates tightly
+  with stats logging.
+- Crash-recovery prompt not yet rendered in the portal UI.
+
+## M7..M12
 
 (Pending.)

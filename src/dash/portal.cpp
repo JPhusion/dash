@@ -9,6 +9,7 @@
 #include "dash/imu.h"
 #include "dash/log.h"
 #include "dash/power.h"
+#include "dash/session.h"
 #include "dash/settings.h"
 #include "dash/state_machine.h"
 #include "dash/wifi_ap.h"
@@ -140,6 +141,54 @@ void Portal::begin() {
     }
     log::info(kTag, "config updated");
     sv->send(200, "application/json", "{\"ok\":true}");
+  });
+
+  // --- /api/session ---
+  sv->on("/api/session", HTTP_GET, [this, sv]() {
+    lastClientMs_ = millis();
+    auto snap = session().snapshot();
+    char buf[256];
+    uint32_t elapsed_s = 0;
+    if (snap.active) {
+      uint32_t elapsedMs = (millis() - snap.startedAtMs) - snap.pausedMs;
+      elapsed_s = elapsedMs / 1000UL;
+    }
+    snprintf(buf, sizeof(buf),
+             "{\"active\":%s,\"state\":%d,\"elapsed_s\":%u,"
+             "\"total_s\":%u,\"distractions\":%u}",
+             snap.active ? "true" : "false", (int)snap.state,
+             (unsigned)elapsed_s,
+             (unsigned)snap.targetMin * 60u,
+             (unsigned)snap.distractions);
+    sv->send(200, "application/json", buf);
+  });
+
+  sv->on("/api/session", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    if (!sv->hasArg("plain")) { sv->send(400, "text/plain", "no body"); return; }
+    JsonDocument doc;
+    auto err = deserializeJson(doc, sv->arg("plain"));
+    if (err) { sv->send(400, "text/plain", "bad json"); return; }
+    String action = doc["action"].as<String>();
+    if (action == "start") {
+      uint16_t minutes = doc["minutes"].is<unsigned>()
+                           ? (uint16_t)doc["minutes"].as<unsigned>()
+                           : settings().sessionLengthMin();
+      bool ok = session().start(minutes);
+      sv->send(ok ? 200 : 409, "application/json",
+               ok ? "{\"ok\":true}" : "{\"error\":\"already running\"}");
+    } else if (action == "pause") {
+      session().pause();
+      sv->send(200, "application/json", "{\"ok\":true}");
+    } else if (action == "resume") {
+      session().resume();
+      sv->send(200, "application/json", "{\"ok\":true}");
+    } else if (action == "stop") {
+      session().stop(false);
+      sv->send(200, "application/json", "{\"ok\":true}");
+    } else {
+      sv->send(400, "text/plain", "unknown action");
+    }
   });
 
   // --- Static file fallback / root ---

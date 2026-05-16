@@ -19,6 +19,7 @@
 #include "dash/portal.h"
 #include "dash/power.h"
 #include "dash/reset_reason.h"
+#include "dash/session.h"
 #include "dash/settings.h"
 #include "dash/sounds.h"
 #include "dash/state_machine.h"
@@ -143,6 +144,9 @@ void setup() {
   dash::idleManager().setSleepTimeoutSec(dash::settings().sleepTimeoutSec());
   dash::idleManager().begin();
   dash::idleManager().start();
+
+  // Session controller.
+  dash::session().begin();
 
   // WiFi AP + captive portal.
   if (dash::wifiAp().start()) {
