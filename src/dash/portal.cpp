@@ -192,6 +192,41 @@ void Portal::begin() {
     }
   });
 
+  // --- /api/onboarding ---
+  sv->on("/api/onboarding", HTTP_GET, [this, sv]() {
+    lastClientMs_ = millis();
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+             "{\"onboarded\":%s,\"name\":\"%s\",\"home_wifi_set\":%s}",
+             settings().onboarded() ? "true" : "false",
+             settings().deviceName().c_str(),
+             settings().homeWifiSsid().length() > 0 ? "true" : "false");
+    sv->send(200, "application/json", buf);
+  });
+
+  sv->on("/api/onboarding", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    if (!sv->hasArg("plain")) { sv->send(400, "text/plain", "no body"); return; }
+    JsonDocument doc;
+    auto err = deserializeJson(doc, sv->arg("plain"));
+    if (err) { sv->send(400, "text/plain", "bad json"); return; }
+    if (doc["name"].is<const char*>()) {
+      settings().setDeviceName(doc["name"].as<String>());
+    }
+    if (doc["home_ssid"].is<const char*>()) {
+      settings().setHomeWifiSsid(doc["home_ssid"].as<String>());
+    }
+    if (doc["home_password"].is<const char*>()) {
+      settings().setHomeWifiPassword(doc["home_password"].as<String>());
+    }
+    if (doc["complete"].is<bool>() && doc["complete"].as<bool>()) {
+      settings().setOnboarded(true);
+      stateMachine().transitionTo(DeviceState::Idle);
+      log::info(kTag, "onboarding complete");
+    }
+    sv->send(200, "application/json", "{\"ok\":true}");
+  });
+
   // --- /api/stats ---
   sv->on("/api/stats", HTTP_GET, [this, sv]() {
     lastClientMs_ = millis();

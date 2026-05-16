@@ -141,7 +141,14 @@ void setup() {
   dash::audio().setVolume(dash::settings().audioVolume());
 
   // State machine + idle manager.
-  dash::stateMachine().transitionTo(dash::DeviceState::Idle);
+  // First-boot users land in Onboarding; portal wizard transitions them to
+  // Idle once they finish.
+  if (dash::settings().onboarded()) {
+    dash::stateMachine().transitionTo(dash::DeviceState::Idle);
+  } else {
+    dash::stateMachine().transitionTo(dash::DeviceState::Onboarding);
+    dash::character().setMood(dash::Mood::Listening);
+  }
   dash::idleManager().setSleepTimeoutSec(dash::settings().sleepTimeoutSec());
   dash::idleManager().begin();
   dash::idleManager().start();

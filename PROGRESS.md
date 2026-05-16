@@ -263,6 +263,31 @@
 - DNS-based distraction detection still not wired; without it, distractions
   count stays 0 across all sessions.
 
-## M8..M12
+## M8 — Onboarding ✅
+
+**Done**
+- First-boot detection via `settings().onboarded()`. If false, state machine
+  transitions to `Onboarding` and Character mood goes to `Listening` instead
+  of the usual Idle.
+- Portal `/api/onboarding`: GET returns current onboarding state and the
+  device name + whether home WiFi is configured; POST accepts partial updates
+  (`name`, `home_ssid`, `home_password`, `complete` flag).
+- `/web/onboarding.html` — three-step wizard (welcome → name → WiFi → done).
+  Vanilla CSS-only multi-step view using `hidden` attribute.
+- Main `app.js` redirects to onboarding.html if not yet onboarded.
+- "Onboarded=true" flag persists in NVS so subsequent boots skip the wizard.
+
+**Tested**
+- Build clean. Onboarding API endpoints registered. Flow not yet exercised
+  end-to-end on hardware (requires phone AP connection in the morning).
+
+**Open issues / deferred**
+- Home WiFi credentials are stored in NVS but **NOT encrypted** — see
+  ADR-005. M9 OTA will rely on this. For production, M12 should consider
+  application-level AES blob encryption of `hwifi_p`.
+- No QR code generation on OLED yet. The cube currently shows its name + IP
+  on the display when in Onboarding state (added via Character logic).
+
+## M9..M12
 
 (Pending.)

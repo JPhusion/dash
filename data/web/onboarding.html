@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e1116">
+  <title>Welcome to Dash</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div class="logo">●&nbsp;Dash</div>
+    <div class="status" id="status-pill">setting up…</div>
+  </header>
+
+  <main>
+    <section class="card" id="step-welcome">
+      <h2>Hi 👋</h2>
+      <p class="subtle">I'm Dash, your study companion. Three quick questions and we'll get going.</p>
+      <div class="actions"><button class="primary" onclick="next('name')">Let's go</button></div>
+    </section>
+
+    <section class="card" id="step-name" hidden>
+      <h3>What should I be called?</h3>
+      <label>Name <input id="ob-name" maxlength="16" placeholder="Dash"></label>
+      <div class="actions">
+        <button onclick="next('welcome')">Back</button>
+        <button class="primary" onclick="next('wifi')">Next</button>
+      </div>
+    </section>
+
+    <section class="card" id="step-wifi" hidden>
+      <h3>Home Wi-Fi (optional)</h3>
+      <p class="subtle">I'll use this to download updates while you're asleep. You can skip this and add it later in settings.</p>
+      <label>SSID <input id="ob-ssid" maxlength="32"></label>
+      <label>Password <input id="ob-pass" type="password" maxlength="64"></label>
+      <div class="actions">
+        <button onclick="next('name')">Back</button>
+        <button class="primary" onclick="next('done')">Save</button>
+      </div>
+    </section>
+
+    <section class="card" id="step-done" hidden>
+      <h3>All set</h3>
+      <p class="subtle">Double-tap the cube or tap "Start session" to begin.</p>
+      <div class="actions">
+        <button class="primary" onclick="finish()">Finish</button>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    function show(id) {
+      ["welcome","name","wifi","done"].forEach(s =>
+        document.getElementById("step-" + s).hidden = (s !== id));
+    }
+    async function next(target) { show(target); }
+    async function api(path, opts={}) {
+      const r = await fetch(path, { headers: {"content-type":"application/json"}, ...opts });
+      return r.ok ? await r.json() : null;
+    }
+    async function finish() {
+      const body = {
+        name: document.getElementById("ob-name").value || "Dash",
+        home_ssid: document.getElementById("ob-ssid").value || "",
+        home_password: document.getElementById("ob-pass").value || "",
+        complete: true,
+      };
+      await api("/api/onboarding", { method: "POST", body: JSON.stringify(body) });
+      document.getElementById("status-pill").classList.add("ok");
+      document.getElementById("status-pill").textContent = "done";
+      location.href = "/";
+    }
+  </script>
+</body>
+</html>

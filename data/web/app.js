@@ -157,6 +157,14 @@ function bind() {
 async function boot() {
   bind();
   await timeSync();
+  // If the device hasn't been onboarded, redirect to the wizard.
+  try {
+    const ob = await api("/api/onboarding");
+    if (ob && !ob.onboarded && location.pathname !== "/onboarding.html") {
+      location.href = "/onboarding.html";
+      return;
+    }
+  } catch (e) {}
   await refreshStatus();
   await refreshConfig();
   await refreshSession();
