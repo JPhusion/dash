@@ -17,6 +17,7 @@
 #include "dash/log.h"
 #include "dash/power.h"
 #include "dash/reset_reason.h"
+#include "dash/sounds.h"
 #include "dash/state_machine.h"
 #include "dash/touch.h"
 
@@ -31,6 +32,7 @@ void onImuEvent(const dash::ImuEvent& e) {
     case ImuEventType::Tap:
       dash::log::info("Main", "tap (mag=%.2fg)", e.magnitude);
       dash::display().blink();
+      dash::sounds::play(dash::sounds::kTapAck);
       break;
     case ImuEventType::DoubleTap:
       dash::log::info("Main", "double-tap");
@@ -129,6 +131,9 @@ void setup() {
   dash::stateMachine().transitionTo(dash::DeviceState::Idle);
   dash::idleManager().begin();
   dash::idleManager().start();
+
+  // Boot chime (silent under DASH_SILENT_AUDIO).
+  dash::sounds::play(dash::sounds::kBoot);
 
   dash::log::info("Main", "setup complete");
 }

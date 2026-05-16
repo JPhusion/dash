@@ -112,6 +112,37 @@
 
 ---
 
-## M3..M12
+## M3 — Sound Generation Pipeline ✅
+
+**Done**
+- `tools/sounds/generate.py` — procedural sound generator. 18 sounds covering
+  boot, wake/sleep, session start/end/complete, menu blip/confirm/back,
+  distraction, encouragement, yawn, giggle, heartbeat, game start/correct/
+  wrong, tap acknowledgement. Output: 8 kHz mono u8 PCM `.raw` files in
+  `data/sounds/`. Total 46.1 KiB.
+- DSP primitives: sine/square/triangle/noise oscillators, pitch sweeps,
+  linear ADSR envelope, file concat.
+- `src/dash/sounds.h` — central registry mapping every sound to its on-flash
+  path so application code uses `dash::sounds::kBoot` instead of literal
+  strings. Convenience `dash::sounds::play()` defaults to the canonical 8 kHz
+  u8 format.
+- LittleFS image built via `pio run -t uploadfs` — sounds flashed to the
+  spiffs partition.
+- Boot chime wired into `main.cpp` (silent under `DASH_SILENT_AUDIO`).
+- Tap-ack chirp on every IMU tap event.
+
+**Tested**
+- Hardware: serial logs confirm `[Audio] play /sounds/boot.raw (8000 Hz, u8)
+  [silent]` after `setup complete` — file is found, opened, format detected,
+  written to I2S with gain=0. Volume restoration in production build is a
+  one-line flip.
+- Generator is deterministic via `np.random.seed(hash(name))` so identical
+  re-runs produce identical bytes.
+
+**Open issues / deferred**
+- No way for the user to preview the sounds on host machine — generator
+  outputs `.raw` not `.wav`. Could add a `--wav` flag later for QA.
+
+## M4..M12
 
 (Pending.)
