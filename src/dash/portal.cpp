@@ -8,6 +8,7 @@
 #include "dash/audio.h"
 #include "dash/build_info.h"
 #include "dash/character.h"
+#include "dash/display.h"
 #include "dash/esp_now_dash.h"
 #include "dash/games.h"
 #include "dash/imu.h"
@@ -250,6 +251,11 @@ void Portal::begin() {
     if (doc["complete"].is<bool>() && doc["complete"].as<bool>()) {
       settings().setOnboarded(true);
       stateMachine().transitionTo(DeviceState::Idle);
+      character().setMood(Mood::Neutral);
+      // Clear the "Connect to: Dash-XXXX" text overlay we showed during
+      // onboarding so the eyes return on the OLED.
+      display().clearOverlay();
+      character().react(EyeState::Happy, 1500);
       log::info(kTag, "onboarding complete");
     }
     if (doc["reset"].is<bool>() && doc["reset"].as<bool>()) {
@@ -257,6 +263,8 @@ void Portal::begin() {
       // app.js redirect sends the user back to /onboarding.html.
       settings().setOnboarded(false);
       stateMachine().transitionTo(DeviceState::Onboarding);
+      character().setMood(Mood::Listening);
+      display().showText("Connect to:", wifiAp().ssid().c_str());
       log::info(kTag, "onboarding reset by user");
     }
     sv->send(200, "application/json", "{\"ok\":true}");

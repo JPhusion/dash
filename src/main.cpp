@@ -188,6 +188,12 @@ void setup() {
     dash::character().playBootAnimation();
   }
 
+  // First-time users haven't seen the portal yet — show the SSID on the
+  // OLED so they know which network to join.
+  if (!dash::settings().onboarded()) {
+    dash::display().showText("Connect to:", dash::wifiAp().ssid().c_str());
+  }
+
   dash::log::info("Main", "setup complete");
 }
 
