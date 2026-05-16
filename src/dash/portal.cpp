@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <LittleFS.h>
+#include <Preferences.h>
 #include <WebServer.h>
 
 #include "dash/build_info.h"
@@ -234,6 +235,40 @@ void Portal::begin() {
       stateMachine().transitionTo(DeviceState::Onboarding);
       log::info(kTag, "onboarding reset by user");
     }
+    sv->send(200, "application/json", "{\"ok\":true}");
+  });
+
+  // --- /api/stats DELETE (reset) ---
+  sv->on("/api/stats", HTTP_DELETE, [this, sv]() {
+    lastClientMs_ = millis();
+    LittleFS.remove("/stats/sessions.ndjson");
+    log::info(kTag, "stats reset by user");
+    sv->send(200, "application/json", "{\"ok\":true}");
+  });
+
+  // --- /api/factory-reset ---
+  sv->on("/api/factory-reset", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    log::info(kTag, "factory reset requested");
+    // Wipe NVS namespace + stats log + flag onboarding back to false.
+    Preferences p;
+    p.begin("dash.cfg", false);
+    p.clear();
+    p.end();
+    p.begin("dash.imu", false);
+    p.clear();
+    p.end();
+    LittleFS.remove("/stats/sessions.ndjson");
+    sv->send(200, "application/json", "{\"ok\":true,\"rebooting\":true}");
+    delay(500);
+    ESP.restart();
+  });
+
+  // --- /api/easter-egg (konami / fun extras) ---
+  sv->on("/api/easter-egg", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    log::info(kTag, "konami code");
+    character().react(EyeState::Heart, 2500);
     sv->send(200, "application/json", "{\"ok\":true}");
   });
 

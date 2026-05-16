@@ -1,23 +1,77 @@
-// Dash captive-portal client. Targets evergreen mobile Safari/Chrome —
-// vanilla JS, no framework, no bundler.
+// Dash portal — vanilla JS controller. Mobile Safari / Chrome target.
+//
+// One file because the portal is small and loading a second JS file off
+// LittleFS isn't worth the round-trip. Sections marked with header comments.
 
-const $ = (id) => document.getElementById(id);
+const $  = (id) => document.getElementById(id);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+/* =========================================================================
+ * State
+ * ========================================================================= */
 
 const state = {
   status: null,
   config: null,
   session: null,
+  stats: null,
+  selectedMinutes: 25,
+  activeTab: "study",
+  lastError: null,
 };
 
+const MOOD_NAMES = ["neutral", "focused", "excited", "tired", "listening", "playful"];
+
+/* =========================================================================
+ * Networking
+ * ========================================================================= */
+
 async function api(path, opts = {}) {
-  const resp = await fetch(path, {
-    headers: { "content-type": "application/json", ...(opts.headers || {}) },
-    ...opts,
-  });
-  if (!resp.ok) throw new Error(`${path}: HTTP ${resp.status}`);
-  const ct = resp.headers.get("content-type") || "";
-  return ct.includes("json") ? await resp.json() : await resp.text();
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const resp = await fetch(path, {
+      headers: { "content-type": "application/json", ...(opts.headers || {}) },
+      signal: ctrl.signal,
+      ...opts,
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const ct = resp.headers.get("content-type") || "";
+    return ct.includes("json") ? await resp.json() : await resp.text();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
+
+/* =========================================================================
+ * Toast
+ * ========================================================================= */
+
+let toastTimer = null;
+function toast(msg, kind = "") {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.remove("err");
+  if (kind === "err") t.classList.add("err");
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2400);
+}
+
+/* =========================================================================
+ * Status pill
+ * ========================================================================= */
+
+function setPill(cls, text) {
+  const p = $("status-pill");
+  p.classList.remove("ok", "err", "busy");
+  if (cls) p.classList.add(cls);
+  p.textContent = text;
+}
+
+/* =========================================================================
+ * Time sync (one-shot at boot)
+ * ========================================================================= */
 
 async function timeSync() {
   try {
@@ -28,149 +82,399 @@ async function timeSync() {
         tz_min: -new Date().getTimezoneOffset(),
       }),
     });
-  } catch (e) {
-    console.warn("time-sync failed", e);
-  }
+  } catch (e) { /* not fatal */ }
 }
+
+/* =========================================================================
+ * Status / config / session / stats
+ * ========================================================================= */
 
 async function refreshStatus() {
   try {
     state.status = await api("/api/status");
     setPill("ok", state.status.state);
     $("device-name").textContent = state.status.name || "Dash";
-    $("device-state").textContent = describeState(state.status);
-    $("footer").textContent = `firmware ${state.status.firmware} · boot #${state.status.boot_count}`;
+    const m = state.status.mood;
+    $("mood-text").textContent =
+      describeStatusLine(state.status);
   } catch (e) {
     setPill("err", "offline");
+    state.lastError = String(e);
+  }
+}
+
+function describeStatusLine(s) {
+  if (!s) return "—";
+  switch (s.state) {
+    case "Onboarding": return "ready to meet you";
+    case "Idle":       return "ready when you are";
+    case "Drowsy":     return "getting sleepy";
+    case "Asleep":     return "asleep — touch to wake";
+    case "InSession":  return "focused with you";
+    case "InMenu":     return "in the menu";
+    case "InGame":     return "playing";
+    case "OtaChecking":return "looking for updates";
+    case "GroupSessionActive":  return "in a group session";
+    case "GroupSessionWaiting": return "waiting for friends";
+    default:           return s.state.toLowerCase();
   }
 }
 
 async function refreshConfig() {
   try {
     state.config = await api("/api/config");
-    $("cfg-name").value = state.config.name || "";
-    $("cfg-volume").value = state.config.volume ?? 60;
-    $("cfg-sleep-min").value = Math.round((state.config.sleep_timeout_s || 180) / 60);
-    $("cfg-session-min").value = state.config.session_minutes || 25;
-  } catch (e) {
-    console.warn("config fetch", e);
-  }
+    const c = state.config;
+    $("cfg-name").value = c.name || "";
+    $("cfg-volume").value = c.volume ?? 60;
+    $("vol-label").textContent = c.volume ?? 60;
+    $("cfg-sleep-min").value = Math.round((c.sleep_timeout_s || 180) / 60);
+    $("cfg-session-min").value = c.session_minutes || 25;
+    // Sync the selected chip default.
+    selectMinutes(c.session_minutes || 25);
+  } catch (e) {}
+}
+
+async function refreshHomeWifi() {
+  try {
+    const ob = await api("/api/onboarding");
+    // Note: API doesn't return ssid string for security; we just show whether set.
+    if (ob.home_wifi_set) {
+      $("cfg-home-ssid").placeholder = "(saved)";
+    }
+  } catch (e) {}
 }
 
 async function refreshSession() {
   try {
     state.session = await api("/api/session");
     renderSession();
-  } catch (e) { /* session API may not be wired until M6 */ }
+  } catch (e) {}
 }
 
 async function refreshStats() {
   try {
-    const s = await api("/api/stats");
-    const total = s.total_sessions || 0;
-    if (total === 0) {
-      $("stats-summary").textContent = "no sessions yet";
-      return;
-    }
-    const focusedMin = Math.round((s.total_focused_sec || 0) / 60);
-    const best = Math.round((s.best_single_sec || 0) / 60);
-    $("stats-summary").innerHTML =
-      `<b>${s.completed_sessions}/${total}</b> completed · ` +
-      `<b>${focusedMin}</b> min focused · ` +
-      `<b>${s.total_distractions}</b> distractions · ` +
-      `best <b>${best}</b> min`;
+    state.stats = await api("/api/stats");
+    renderStats();
   } catch (e) {}
 }
 
-function describeState(s) {
-  if (!s) return "—";
-  return `${s.state} · ${s.face}`;
-}
+/* =========================================================================
+ * Session render
+ * ========================================================================= */
 
 function renderSession() {
-  if (!state.session || !state.session.active) {
-    $("session-progress").hidden = true;
-    $("btn-start-session").hidden = false;
-    $("btn-end-session").hidden = true;
+  const s = state.session;
+  if (!s || !s.active) {
+    $("session-idle").hidden = false;
+    $("session-running").hidden = true;
     return;
   }
-  $("session-progress").hidden = false;
-  $("btn-start-session").hidden = true;
-  $("btn-end-session").hidden = false;
-  const pct = Math.min(100, (state.session.elapsed_s / state.session.total_s) * 100);
+  $("session-idle").hidden = true;
+  $("session-running").hidden = false;
+  const elapsed = s.elapsed_s | 0;
+  const total = s.total_s | 0;
+  $("timer").textContent = formatTimer(elapsed);
+  $("timer-sub").textContent =
+    `of ${formatTimer(total)} · ${s.distractions} distraction${s.distractions === 1 ? "" : "s"}`;
+  const pct = total > 0 ? Math.min(100, (elapsed / total) * 100) : 0;
   $("progress-fill").style.width = `${pct}%`;
-  $("session-elapsed").textContent = formatTime(state.session.elapsed_s);
-  $("session-total").textContent = formatTime(state.session.total_s);
+  $("running-mood").textContent =
+    s.distractions === 0 ? "in the zone" : "stay with it";
 }
 
-function formatTime(s) {
+function formatTimer(s) {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, "0")}`;
+  return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
 }
 
-function setPill(cls, text) {
-  const pill = $("status-pill");
-  pill.classList.remove("ok", "err");
-  if (cls) pill.classList.add(cls);
-  pill.textContent = text;
+/* =========================================================================
+ * Stats render
+ * ========================================================================= */
+
+function renderStats() {
+  const s = state.stats;
+  if (!s) return;
+
+  const focusedMin = Math.round((s.total_focused_sec || 0) / 60);
+  const totalH = (focusedMin / 60).toFixed(1);
+  $("stats-total").innerHTML =
+    `<span>${totalH}</span><span class="unit">h focused · ${s.total_sessions} session${s.total_sessions === 1 ? "" : "s"}</span>`;
+  $("stats-streak").textContent = s.streak_days
+    ? `${s.streak_days} day${s.streak_days === 1 ? "" : "s"} 🔥`
+    : "—";
+  const bestMin = Math.round((s.best_single_sec || 0) / 60);
+  $("stats-best").textContent = bestMin ? `${bestMin} min` : "—";
+  $("stats-distractions").textContent = s.total_distractions || 0;
+
+  // 7-day bars: bucket recent sessions by day relative to "today".
+  renderWeekBars(s.recent || []);
+
+  // History list.
+  const hist = $("history-list");
+  hist.innerHTML = "";
+  if (!s.recent || s.recent.length === 0) {
+    hist.innerHTML = '<div class="subtle">no sessions yet — go start one</div>';
+    return;
+  }
+  for (const r of s.recent.slice().reverse()) {
+    const date = r.u ? new Date(r.u * 1000) : null;
+    const when = date ? friendlyTime(date) : "—";
+    const min = Math.round((r.as || 0) / 60);
+    const target = r.tm || 0;
+    const completed = r.c === 1;
+    const node = document.createElement("div");
+    node.className = "row";
+    node.innerHTML =
+      `<div class="col">
+         <span style="font-weight:600">${min} min focus</span>
+         <span class="meta">${when} · target ${target} min · ${r.d || 0} distractions</span>
+       </div>
+       <span class="${completed ? 'text-success' : 'muted'}">${completed ? '✓' : '·'}</span>`;
+    hist.appendChild(node);
+  }
 }
+
+function friendlyTime(d) {
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  const diffDays = Math.floor((now - d) / 86400000);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString();
+}
+
+function renderWeekBars(recent) {
+  const wb = $("week-bars");
+  wb.innerHTML = "";
+  const now = new Date();
+  const days = []; // index 0 = 6 days ago, index 6 = today
+  for (let i = 0; i < 7; i++) {
+    days.push({ minutes: 0, label: ["S","M","T","W","T","F","S"][new Date(now.getTime() - (6 - i) * 86400000).getDay()] });
+  }
+  let max = 0;
+  for (const r of recent || []) {
+    if (!r.u) continue;
+    const d = new Date(r.u * 1000);
+    const diffDays = Math.floor((now - d) / 86400000);
+    const idx = 6 - diffDays;
+    if (idx >= 0 && idx < 7) {
+      days[idx].minutes += Math.round((r.as || 0) / 60);
+      if (days[idx].minutes > max) max = days[idx].minutes;
+    }
+  }
+  for (const day of days) {
+    const bar = document.createElement("div");
+    const h = max > 0 ? Math.max(2, (day.minutes / max) * 80) : 2;
+    bar.style.height = `${h}px`;
+    if (day.minutes === 0) bar.style.opacity = "0.3";
+    bar.innerHTML = `<span class="label">${day.label}</span>`;
+    wb.appendChild(bar);
+  }
+  const todayMin = days[6].minutes;
+  $("week-summary").textContent = todayMin > 0
+    ? `${todayMin} min focused today`
+    : (max > 0 ? "no focus yet today" : "a quiet week");
+}
+
+/* =========================================================================
+ * Duration chips
+ * ========================================================================= */
+
+function selectMinutes(min) {
+  state.selectedMinutes = min;
+  $$("#duration-chips .chip").forEach(c => {
+    const v = c.dataset.min;
+    const isPick = (v == "custom" && min === "custom") ||
+                   (v == String(min)) ||
+                   (v == "custom" && typeof min === "number" && ![25,45,60,90].includes(min));
+    c.setAttribute("aria-pressed", isPick);
+  });
+  const custom = $("custom-min");
+  if (min === "custom" || (typeof min === "number" && ![25,45,60,90].includes(min))) {
+    custom.hidden = false;
+    if (typeof min === "number") custom.value = min;
+    custom.focus();
+  } else {
+    custom.hidden = true;
+  }
+}
+
+function currentMinutes() {
+  if (state.selectedMinutes === "custom") {
+    const v = parseInt($("custom-min").value || "25", 10);
+    return Math.max(5, Math.min(240, v));
+  }
+  return typeof state.selectedMinutes === "number" ? state.selectedMinutes : 25;
+}
+
+/* =========================================================================
+ * Actions
+ * ========================================================================= */
 
 async function startSession() {
-  const minutes = Number($("cfg-session-min").value) || 25;
+  const minutes = currentMinutes();
+  const label = $("session-label").value;
+  $("btn-start-session").disabled = true;
   try {
     await api("/api/session", {
       method: "POST",
-      body: JSON.stringify({ action: "start", minutes }),
+      body: JSON.stringify({ action: "start", minutes, label }),
     });
+    toast(`session started — ${minutes} min`);
     await refreshSession();
-  } catch (e) { alert("could not start session: " + e.message); }
+  } catch (e) {
+    toast("could not start session", "err");
+  } finally {
+    $("btn-start-session").disabled = false;
+  }
 }
 
 async function endSession() {
+  if (!confirm("End the session early?")) return;
   try {
     await api("/api/session", { method: "POST", body: JSON.stringify({ action: "stop" }) });
+    toast("session ended");
     await refreshSession();
-  } catch (e) {}
+    await refreshStats();
+  } catch (e) { toast("end failed", "err"); }
 }
 
 async function saveConfig() {
   const body = {
-    name: $("cfg-name").value,
+    name: $("cfg-name").value || "Dash",
     volume: Number($("cfg-volume").value),
-    sleep_timeout_s: Number($("cfg-sleep-min").value) * 60,
-    session_minutes: Number($("cfg-session-min").value),
+    sleep_timeout_s: Number($("cfg-sleep-min").value || 3) * 60,
+    session_minutes: Number($("cfg-session-min").value || 25),
+    home_ssid: $("cfg-home-ssid").value || undefined,
+    home_password: $("cfg-home-pw").value || undefined,
   };
   try {
     await api("/api/config", { method: "POST", body: JSON.stringify(body) });
-    setPill("ok", "saved");
-    setTimeout(refreshStatus, 600);
-  } catch (e) { setPill("err", "save failed"); }
+    toast("saved");
+    refreshStatus();
+  } catch (e) { toast("save failed", "err"); }
 }
 
 async function replayOnboarding() {
   if (!confirm("Replay the welcome tutorial?")) return;
   try {
-    await api("/api/onboarding", {
-      method: "POST",
-      body: JSON.stringify({ reset: true }),
-    });
+    await api("/api/onboarding", { method: "POST", body: JSON.stringify({ reset: true }) });
     location.href = "/onboarding.html";
-  } catch (e) { alert("could not reset: " + e.message); }
+  } catch (e) { toast("could not reset", "err"); }
 }
+
+async function otaCheck() {
+  setPill("busy", "checking…");
+  $("btn-ota-check").disabled = true;
+  try {
+    await api("/api/ota/check", { method: "POST" });
+    toast("checking — Dash may reboot if there's an update");
+  } catch (e) {
+    toast("update check failed", "err");
+    setPill("err", "ota error");
+  } finally {
+    $("btn-ota-check").disabled = false;
+    setTimeout(refreshStatus, 1500);
+  }
+}
+
+async function resetStats() {
+  if (!confirm("Delete all session history? This can't be undone.")) return;
+  try {
+    await api("/api/stats", { method: "DELETE" });
+    toast("stats reset");
+    refreshStats();
+  } catch (e) { toast("reset failed", "err"); }
+}
+
+async function factoryReset() {
+  if (!confirm("Factory reset Dash? You'll need to onboard again.")) return;
+  if (!confirm("Are you really sure? Settings and stats will all be cleared.")) return;
+  try {
+    await api("/api/factory-reset", { method: "POST" });
+    toast("resetting…");
+    setTimeout(() => location.href = "/onboarding.html", 1500);
+  } catch (e) { toast("reset failed", "err"); }
+}
+
+async function startGroupStudy() {
+  try {
+    await api("/api/group", { method: "POST", body: JSON.stringify({ action: "start" }) });
+    toast("looking for nearby Dashes");
+  } catch (e) { toast("group study failed", "err"); }
+}
+
+/* =========================================================================
+ * Tabs
+ * ========================================================================= */
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  $$(".tab").forEach(t => t.setAttribute("aria-current", t.dataset.tab === tab));
+  $$(".tab-page").forEach(p => p.classList.toggle("active", p.id === `tab-${tab}`));
+  // Refresh data when tab becomes visible.
+  if (tab === "stats") refreshStats();
+}
+
+/* =========================================================================
+ * Bind
+ * ========================================================================= */
 
 function bind() {
   $("btn-start-session").addEventListener("click", startSession);
   $("btn-end-session").addEventListener("click", endSession);
   $("btn-save-config").addEventListener("click", saveConfig);
-  const replay = $("btn-replay-onboarding");
-  if (replay) replay.addEventListener("click", replayOnboarding);
+  $("btn-replay-onboarding").addEventListener("click", replayOnboarding);
+  $("btn-ota-check").addEventListener("click", otaCheck);
+  $("btn-reset-stats").addEventListener("click", resetStats);
+  $("btn-factory-reset").addEventListener("click", factoryReset);
+  $("btn-group-study").addEventListener("click", startGroupStudy);
+
+  $("cfg-volume").addEventListener("input", (e) => {
+    $("vol-label").textContent = e.target.value;
+  });
+
+  $("btn-toggle-pw").addEventListener("click", () => {
+    const i = $("cfg-home-pw");
+    if (i.type === "password") { i.type = "text"; $("btn-toggle-pw").textContent = "hide"; }
+    else { i.type = "password"; $("btn-toggle-pw").textContent = "show"; }
+  });
+
+  $$("#duration-chips .chip").forEach(c => {
+    c.addEventListener("click", () => {
+      const v = c.dataset.min;
+      selectMinutes(v === "custom" ? "custom" : parseInt(v, 10));
+    });
+  });
+
+  $$(".tab").forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+
+  // Konami code easter egg.
+  let buf = [];
+  const code = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"];
+  document.addEventListener("keydown", (e) => {
+    buf.push(e.key);
+    if (buf.length > code.length) buf.shift();
+    if (buf.join(",") === code.join(",")) { konami(); buf = []; }
+  });
 }
+
+async function konami() {
+  toast("🎉 Dash sees you", "");
+  try { await api("/api/easter-egg", { method: "POST" }); } catch (e) {}
+}
+
+/* =========================================================================
+ * Boot
+ * ========================================================================= */
 
 async function boot() {
   bind();
   await timeSync();
-  // If the device hasn't been onboarded, redirect to the wizard.
+  // Redirect first-boot users to the wizard.
   try {
     const ob = await api("/api/onboarding");
     if (ob && !ob.onboarded && location.pathname !== "/onboarding.html") {
@@ -178,13 +482,11 @@ async function boot() {
       return;
     }
   } catch (e) {}
-  await refreshStatus();
-  await refreshConfig();
-  await refreshSession();
+  await Promise.all([refreshStatus(), refreshConfig(), refreshSession(), refreshHomeWifi()]);
   await refreshStats();
   setInterval(refreshStatus, 4000);
-  setInterval(refreshSession, 3000);
-  setInterval(refreshStats, 15000);
+  setInterval(refreshSession, 1000);
+  setInterval(refreshStats, 30000);
 }
 
-boot();
+document.addEventListener("DOMContentLoaded", boot);

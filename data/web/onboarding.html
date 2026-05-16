@@ -3,76 +3,169 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0e1116">
+  <meta name="theme-color" content="#0f1115">
   <title>Welcome to Dash</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header>
-    <div class="logo">●&nbsp;Dash</div>
-    <div class="status" id="status-pill">setting up…</div>
+
+<div class="shell">
+  <header class="app-header">
+    <div class="logo">Dash</div>
+    <div id="status-pill" class="status-pill busy">setting up</div>
   </header>
 
-  <main>
-    <section class="card" id="step-welcome">
-      <h2>Hi 👋</h2>
-      <p class="subtle">I'm Dash, your study companion. Three quick questions and we'll get going.</p>
-      <div class="actions"><button class="primary" onclick="next('name')">Let's go</button></div>
-    </section>
+  <!-- step indicator -->
+  <div class="step-dots" id="dots" aria-hidden="true"></div>
 
-    <section class="card" id="step-name" hidden>
-      <h3>What should I be called?</h3>
-      <label>Name <input id="ob-name" maxlength="16" placeholder="Dash"></label>
-      <div class="actions">
-        <button onclick="next('welcome')">Back</button>
-        <button class="primary" onclick="next('wifi')">Next</button>
+  <!-- step 1: welcome -->
+  <section class="card hero step" data-step="0">
+    <h2>Hi 👋</h2>
+    <p class="subtle">I'm Dash. I'll keep you company while you focus.<br>Three quick questions and we're off.</p>
+    <div class="btn-row" style="margin-top: var(--s-3)">
+      <button class="btn primary next">Let's go</button>
+    </div>
+  </section>
+
+  <!-- step 2: name -->
+  <section class="card step" data-step="1" hidden>
+    <h3>What should I be called?</h3>
+    <p class="subtle">Doesn't have to be "Dash". Pick whatever feels right.</p>
+    <label class="field">
+      <span>Name</span>
+      <input id="ob-name" type="text" maxlength="16" placeholder="Dash">
+    </label>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
+
+  <!-- step 3: gestures tutorial -->
+  <section class="card step" data-step="2" hidden>
+    <h3>Three gestures to know</h3>
+    <div class="col" style="gap: var(--s-3)">
+      <div class="settings-row">
+        <div class="label">
+          <span class="name">Tap me</span>
+          <span class="hint">one tap = wake me up · two taps = start a session</span>
+        </div>
+        <span style="font-size:24px">👆</span>
       </div>
-    </section>
-
-    <section class="card" id="step-wifi" hidden>
-      <h3>Home Wi-Fi (optional)</h3>
-      <p class="subtle">I'll use this to download updates while you're asleep. You can skip this and add it later in settings.</p>
-      <label>SSID <input id="ob-ssid" maxlength="32"></label>
-      <label>Password <input id="ob-pass" type="password" maxlength="64"></label>
-      <div class="actions">
-        <button onclick="next('name')">Back</button>
-        <button class="primary" onclick="next('done')">Save</button>
+      <div class="settings-row">
+        <div class="label">
+          <span class="name">Triple-tap</span>
+          <span class="hint">put me to sleep on command</span>
+        </div>
+        <span style="font-size:24px">😴</span>
       </div>
-    </section>
-
-    <section class="card" id="step-done" hidden>
-      <h3>All set</h3>
-      <p class="subtle">Double-tap the cube or tap "Start session" to begin.</p>
-      <div class="actions">
-        <button class="primary" onclick="finish()">Finish</button>
+      <div class="settings-row">
+        <div class="label">
+          <span class="name">Flip face-down</span>
+          <span class="hint">fast-path to sleep for tonight</span>
+        </div>
+        <span style="font-size:24px">🔻</span>
       </div>
-    </section>
+    </div>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
 
-  </main>
+  <!-- step 4: home wifi -->
+  <section class="card step" data-step="3" hidden>
+    <h3>Home Wi-Fi (optional)</h3>
+    <p class="subtle">I'll use this to grab updates while you're asleep. Skip if you'd rather set this up later.</p>
+    <label class="field">
+      <span>Network name</span>
+      <input id="ob-ssid" type="text" maxlength="32">
+    </label>
+    <label class="field">
+      <span>Password</span>
+      <input id="ob-pass" type="password" maxlength="64">
+    </label>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
 
-  <script>
-    function show(id) {
-      ["welcome","name","wifi","done"].forEach(s =>
-        document.getElementById("step-" + s).hidden = (s !== id));
-    }
-    async function next(target) { show(target); }
-    async function api(path, opts={}) {
-      const r = await fetch(path, { headers: {"content-type":"application/json"}, ...opts });
-      return r.ok ? await r.json() : null;
-    }
-    async function finish() {
-      const body = {
-        name: document.getElementById("ob-name").value || "Dash",
-        home_ssid: document.getElementById("ob-ssid").value || "",
-        home_password: document.getElementById("ob-pass").value || "",
-        complete: true,
-      };
-      await api("/api/onboarding", { method: "POST", body: JSON.stringify(body) });
-      document.getElementById("status-pill").classList.add("ok");
-      document.getElementById("status-pill").textContent = "done";
-      location.href = "/";
-    }
-  </script>
+  <!-- step 5: done -->
+  <section class="card step" data-step="4" hidden>
+    <h3>All set</h3>
+    <p class="subtle">Tap the home screen Start button to begin your first focus session.<br>Or double-tap me directly.</p>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-finish">Take me home</button>
+    </div>
+  </section>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const $  = (id) => document.getElementById(id);
+const $$ = (s) => document.querySelectorAll(s);
+
+let step = 0;
+const total = $$(".step").length;
+
+function renderDots() {
+  const dots = $("dots");
+  dots.innerHTML = "";
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement("span");
+    if (i === step) d.classList.add("on");
+    dots.appendChild(d);
+  }
+}
+
+function show(n) {
+  step = Math.max(0, Math.min(total - 1, n));
+  $$(".step").forEach((el, i) => el.hidden = (i !== step));
+  renderDots();
+}
+
+function bind() {
+  $$(".next").forEach(b => b.addEventListener("click", () => show(step + 1)));
+  $$(".prev").forEach(b => b.addEventListener("click", () => show(step - 1)));
+  $("btn-finish").addEventListener("click", finish);
+}
+
+function toast(msg, kind = "") {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.remove("err");
+  if (kind === "err") t.classList.add("err");
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2400);
+}
+
+async function finish() {
+  const body = {
+    name: $("ob-name").value || "Dash",
+    home_ssid: $("ob-ssid").value || "",
+    home_password: $("ob-pass").value || "",
+    complete: true,
+  };
+  try {
+    const r = await fetch("/api/onboarding", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    $("status-pill").classList.remove("busy");
+    $("status-pill").classList.add("ok");
+    $("status-pill").textContent = "done";
+    setTimeout(() => location.href = "/", 600);
+  } catch (e) { toast("couldn't save", "err"); }
+}
+
+bind();
+renderDots();
+</script>
 </body>
 </html>

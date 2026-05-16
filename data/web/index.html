@@ -3,54 +3,199 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0e1116">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Dash</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header>
-    <div class="logo">●&nbsp;Dash</div>
-    <div class="status" id="status-pill">connecting…</div>
+
+<div class="shell">
+  <header class="app-header">
+    <div class="logo">Dash</div>
+    <div id="status-pill" class="status-pill">connecting</div>
   </header>
 
-  <main>
-    <section class="card" id="home-card">
-      <h2 id="device-name">Dash</h2>
-      <p class="subtle" id="device-state">checking in…</p>
-
-      <div class="actions">
-        <button class="primary" id="btn-start-session">Start session</button>
-        <button id="btn-end-session" hidden>End session</button>
-      </div>
-
-      <div id="session-progress" hidden>
-        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-        <div class="row">
-          <span id="session-elapsed">0:00</span>
-          <span id="session-total">25:00</span>
+  <!-- ============ STUDY TAB ============ -->
+  <section class="tab-page active" id="tab-study">
+    <article class="card hero">
+      <div class="row">
+        <div class="col">
+          <h2 id="device-name">Dash</h2>
+          <span class="mood"><span class="dot" id="mood-dot"></span><span id="mood-text">getting ready</span></span>
         </div>
       </div>
-    </section>
+    </article>
 
-    <section class="card">
-      <h3>Settings</h3>
-      <label>Device name <input id="cfg-name" maxlength="16"></label>
-      <label>Volume <input id="cfg-volume" type="range" min="0" max="100"></label>
-      <label>Sleep after (min) <input id="cfg-sleep-min" type="number" min="1" max="10"></label>
-      <label>Session length (min) <input id="cfg-session-min" type="number" min="5" max="120"></label>
-      <button id="btn-save-config">Save</button>
-      <button id="btn-replay-onboarding" class="ghost">Replay tutorial</button>
-    </section>
+    <!-- Idle: session config -->
+    <article class="card" id="session-idle">
+      <h3>Focus session</h3>
+      <label class="field">
+        <span>What are you working on?</span>
+        <input id="session-label" type="text" maxlength="40" placeholder="(optional)">
+      </label>
+      <label class="field">
+        <span>How long?</span>
+        <div class="chip-row" id="duration-chips">
+          <button class="chip" data-min="25" aria-pressed="true">25 min</button>
+          <button class="chip" data-min="45">45 min</button>
+          <button class="chip" data-min="60">60 min</button>
+          <button class="chip" data-min="90">90 min</button>
+          <button class="chip" data-min="custom">custom</button>
+        </div>
+        <input id="custom-min" type="number" min="5" max="240" hidden placeholder="minutes">
+      </label>
+      <button class="btn primary" id="btn-start-session">Start session</button>
+      <button class="btn ghost" id="btn-group-study">Group study (beta)</button>
+    </article>
 
-    <section class="card">
-      <h3>Stats</h3>
-      <p id="stats-summary" class="subtle">no sessions yet</p>
-    </section>
+    <!-- Running: live timer -->
+    <article class="card" id="session-running" hidden>
+      <h3 id="running-label">In session</h3>
+      <div class="timer" id="timer">00:00</div>
+      <div class="timer-sub" id="timer-sub">of 25:00 · 0 distractions</div>
+      <div class="progress"><div class="fill" id="progress-fill"></div></div>
+      <div class="row">
+        <span class="mood"><span class="dot text-accent"></span><span id="running-mood">focused</span></span>
+        <button class="btn ghost" id="btn-end-session" style="height: 36px; width: auto;">End early</button>
+      </div>
+    </article>
 
-    <footer class="subtle" id="footer">firmware vX</footer>
-  </main>
+    <!-- Last session badge -->
+    <article class="card" id="last-session" hidden>
+      <div class="row">
+        <div class="col">
+          <span class="subtle">Last session</span>
+          <span id="last-session-detail">—</span>
+        </div>
+        <span class="text-success" style="font-weight:700;" id="last-session-badge">✓</span>
+      </div>
+    </article>
+  </section>
 
-  <script src="/app.js" defer></script>
+  <!-- ============ STATS TAB ============ -->
+  <section class="tab-page" id="tab-stats">
+    <article class="card hero">
+      <span class="subtle">Total focused time</span>
+      <div class="big-number" id="stats-total">
+        <span class="skel h-big" style="width:60%"></span>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="row">
+        <div class="col">
+          <span class="subtle">Streak</span>
+          <div id="stats-streak" style="font-weight:700;font-size:var(--fs-lg);">—</div>
+        </div>
+        <div class="col" style="text-align: right">
+          <span class="subtle">Best session</span>
+          <div id="stats-best" style="font-weight:700;font-size:var(--fs-lg);">—</div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <h3>This week</h3>
+      <div class="weekbars" id="week-bars"></div>
+      <p class="subtle muted" id="week-summary">a quiet week</p>
+    </article>
+
+    <article class="card">
+      <h3>Distractions resisted</h3>
+      <div class="row">
+        <span class="big-number" id="stats-distractions" style="font-size:var(--fs-xl);">0</span>
+        <span class="subtle muted">across all sessions</span>
+      </div>
+    </article>
+
+    <article class="card">
+      <h3>Recent sessions</h3>
+      <div class="history" id="history-list">
+        <div class="subtle">no sessions yet</div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ SETTINGS TAB ============ -->
+  <section class="tab-page" id="tab-settings">
+    <article class="card hero">
+      <h3>Dash</h3>
+      <label class="field">
+        <span>Name</span>
+        <input id="cfg-name" type="text" maxlength="16">
+      </label>
+      <label class="field">
+        <span>Volume <span id="vol-label" class="text-accent" style="float:right">60</span></span>
+        <input id="cfg-volume" type="range" min="0" max="100">
+      </label>
+      <button class="btn primary" id="btn-save-config">Save settings</button>
+    </article>
+
+    <div class="settings-group">
+      <h3>Session defaults</h3>
+      <div class="settings-row">
+        <div class="label">
+          <span class="name">Default length</span>
+          <span class="hint">used when you tap Start without picking</span>
+        </div>
+        <input id="cfg-session-min" type="number" min="5" max="240" style="width:96px;text-align:center;">
+      </div>
+      <div class="settings-row">
+        <div class="label">
+          <span class="name">Sleep timeout</span>
+          <span class="hint">how long until Dash naps when idle</span>
+        </div>
+        <input id="cfg-sleep-min" type="number" min="1" max="20" style="width:96px;text-align:center;">
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>Wi-Fi &amp; updates</h3>
+      <label class="field">
+        <span>Home Wi-Fi network</span>
+        <input id="cfg-home-ssid" type="text" maxlength="32" placeholder="(none — OTA disabled)">
+      </label>
+      <label class="field">
+        <span>Password
+          <button id="btn-toggle-pw" type="button"
+                  style="float:right;background:none;border:0;color:var(--fg-dim);cursor:pointer;font-size:var(--fs-xs)">
+            show
+          </button>
+        </span>
+        <input id="cfg-home-pw" type="password" maxlength="64">
+      </label>
+      <button class="btn ghost" id="btn-ota-check">Check for updates now</button>
+    </div>
+
+    <div class="settings-group">
+      <h3>Tutorial</h3>
+      <button class="btn ghost" id="btn-replay-onboarding">Replay welcome tutorial</button>
+    </div>
+
+    <div class="settings-group">
+      <h3>Advanced</h3>
+      <button class="btn danger" id="btn-reset-stats">Reset stats</button>
+      <button class="btn danger" id="btn-factory-reset">Factory reset</button>
+    </div>
+
+    <p class="subtle muted" id="footer" style="text-align:center;">firmware —</p>
+  </section>
+</div>
+
+<!-- Bottom tab bar -->
+<nav class="tabbar">
+  <div class="tabbar-inner">
+    <button class="tab" data-tab="study" aria-current="true">Study</button>
+    <button class="tab" data-tab="stats">Stats</button>
+    <button class="tab" data-tab="settings">Settings</button>
+  </div>
+</nav>
+
+<div id="toast" class="toast"></div>
+
+<script src="/app.js" defer></script>
 </body>
 </html>
