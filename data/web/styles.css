@@ -18,6 +18,28 @@
   --accent: #f3c969;
   --accent-soft: rgba(243, 201, 105, 0.13);
   --accent-press: #d8b14e;
+  --accent-on: #2a1d00;
+}
+
+/* Theme variants — applied via data-theme on <html>. Default is 'warm' (the
+ * declarations above). Override hue + tinted-soft + press shade per theme. */
+html[data-theme="calm"] {
+  --accent: #66d9b9;
+  --accent-soft: rgba(102, 217, 185, 0.13);
+  --accent-press: #4cb795;
+  --accent-on: #00231b;
+}
+html[data-theme="cool"] {
+  --accent: #7da6ff;
+  --accent-soft: rgba(125, 166, 255, 0.13);
+  --accent-press: #6589dd;
+  --accent-on: #00132b;
+}
+html[data-theme="dusk"] {
+  --accent: #d496ff;
+  --accent-soft: rgba(212, 150, 255, 0.13);
+  --accent-press: #b079de;
+  --accent-on: #1f0034;
 
   --success: #66d9b9;
   --warn: #f3a548;
@@ -195,7 +217,7 @@ header.app-header {
 .btn:active { transform: scale(0.97); }
 .btn.primary {
   background: var(--accent);
-  color: #2a1d00;
+  color: var(--accent-on);
   font-weight: 700;
 }
 .btn.primary:active { background: var(--accent-press); }
@@ -286,7 +308,7 @@ input[type=range]::-webkit-slider-thumb {
 }
 .chip[aria-pressed="true"] {
   background: var(--accent);
-  color: #2a1d00;
+  color: var(--accent-on);
   border-color: var(--accent);
 }
 
