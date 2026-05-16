@@ -204,8 +204,14 @@ function renderStats() {
 
   const focusedMin = Math.round((s.total_focused_sec || 0) / 60);
   const totalH = (focusedMin / 60).toFixed(1);
-  $("stats-total").innerHTML =
-    `<span>${totalH}</span><span class="unit">h focused · ${s.total_sessions} session${s.total_sessions === 1 ? "" : "s"}</span>`;
+  if ((s.total_sessions || 0) === 0) {
+    $("stats-total").innerHTML =
+      `<span style="font-size:var(--fs-xl);font-weight:600;color:var(--fg-dim)">Nothing yet</span>` +
+      `<div class="subtle" style="margin-top:var(--s-2)">Your focus stats will live here once you finish your first session.</div>`;
+  } else {
+    $("stats-total").innerHTML =
+      `<span>${totalH}</span><span class="unit">h focused · ${s.total_sessions} session${s.total_sessions === 1 ? "" : "s"}</span>`;
+  }
   $("stats-streak").textContent = s.streak_days
     ? `${s.streak_days} day${s.streak_days === 1 ? "" : "s"} 🔥`
     : "—";
