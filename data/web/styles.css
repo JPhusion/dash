@@ -15,31 +15,11 @@
   --fg-dim: #8a92a2;
   --fg-mute: #5a6373;
 
+  /* Default theme = warm; overridden by html[data-theme] below. */
   --accent: #f3c969;
   --accent-soft: rgba(243, 201, 105, 0.13);
   --accent-press: #d8b14e;
   --accent-on: #2a1d00;
-}
-
-/* Theme variants — applied via data-theme on <html>. Default is 'warm' (the
- * declarations above). Override hue + tinted-soft + press shade per theme. */
-html[data-theme="calm"] {
-  --accent: #66d9b9;
-  --accent-soft: rgba(102, 217, 185, 0.13);
-  --accent-press: #4cb795;
-  --accent-on: #00231b;
-}
-html[data-theme="cool"] {
-  --accent: #7da6ff;
-  --accent-soft: rgba(125, 166, 255, 0.13);
-  --accent-press: #6589dd;
-  --accent-on: #00132b;
-}
-html[data-theme="dusk"] {
-  --accent: #d496ff;
-  --accent-soft: rgba(212, 150, 255, 0.13);
-  --accent-press: #b079de;
-  --accent-on: #1f0034;
 
   --success: #66d9b9;
   --warn: #f3a548;
@@ -70,6 +50,27 @@ html[data-theme="dusk"] {
 
   --t-base: 200ms ease-out;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Theme variants — applied via data-theme on <html>. Only accent vars
+ * change; everything else stays at the :root defaults. */
+html[data-theme="calm"] {
+  --accent: #66d9b9;
+  --accent-soft: rgba(102, 217, 185, 0.13);
+  --accent-press: #4cb795;
+  --accent-on: #00231b;
+}
+html[data-theme="cool"] {
+  --accent: #7da6ff;
+  --accent-soft: rgba(125, 166, 255, 0.13);
+  --accent-press: #6589dd;
+  --accent-on: #00132b;
+}
+html[data-theme="dusk"] {
+  --accent: #d496ff;
+  --accent-soft: rgba(212, 150, 255, 0.13);
+  --accent-press: #b079de;
+  --accent-on: #1f0034;
 }
 
 * { box-sizing: border-box; }

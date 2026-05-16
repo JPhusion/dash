@@ -69,13 +69,38 @@ void Portal::begin() {
   }
 
   // --- Captive-portal probe redirects ---
+  //
+  // Different OSes expect different responses to detect a captive portal:
+  //   iOS / macOS:  GET hotspot-detect.html, expects body == "Success" for
+  //                 no-portal. Anything else => trigger the captive sheet.
+  //   Android:      GET /generate_204, expects HTTP 204 (no content) for
+  //                 no-portal. Anything else => trigger.
+  //   Windows:      GET /connecttest.txt or /ncsi.txt, expects specific text.
+  //
+  // We return a tiny HTML page (not a 302) for all probes. The HTML triggers
+  // the captive sheet on every OS we care about and gives the user a tap
+  // target if the sheet doesn't auto-render.
+  static const char* kCaptiveHtml =
+      "<!doctype html><html><head>"
+      "<meta charset=utf-8>"
+      "<meta http-equiv=refresh content=\"0; url=http://192.168.4.1/\">"
+      "<title>Dash</title>"
+      "</head><body>"
+      "<a href=\"http://192.168.4.1/\">Open Dash</a>"
+      "</body></html>";
+
   static const char* kProbes[] = {
     "/generate_204", "/gen_204", "/hotspot-detect.html",
     "/library/test/success.html", "/connecttest.txt", "/ncsi.txt",
-    "/redirect", "/success.txt",
+    "/redirect", "/success.txt", "/captiveportal.html", "/canonical.html",
+    "/check_network_status.txt", "/fwlink/", "/mobile/status.php",
   };
   for (auto p : kProbes) {
-    sv->on(p, HTTP_GET, [sv]() { redirectToRoot(*sv); });
+    sv->on(p, HTTP_GET, [this, sv, p]() {
+      log::info(kTag, "probe %s host=%s", p, sv->hostHeader().c_str());
+      lastClientMs_ = millis();
+      sv->send(200, "text/html", kCaptiveHtml);
+    });
   }
 
   // --- /api/status ---
@@ -412,11 +437,17 @@ void Portal::begin() {
   sv->onNotFound([this, sv]() {
     lastClientMs_ = millis();
     String p = sv->uri();
-    // Treat unknown hostnames (captive portal probes) as redirect to /.
-    if (sv->hostHeader() != wifiAp().apIp().toString() &&
-        sv->hostHeader() != wifiAp().ssid() + ".local" &&
-        sv->hostHeader() != "dash.local") {
-      redirectToRoot(*sv);
+    String host = sv->hostHeader();
+    log::info(kTag, "404? uri=%s host=%s", p.c_str(), host.c_str());
+    // Any request hitting an external hostname (i.e. a captive-portal probe
+    // from the phone OS) gets the captive HTML — sometimes phones probe
+    // unusual paths we haven't enumerated.
+    if (host.length() > 0 &&
+        host != wifiAp().apIp().toString() &&
+        host != wifiAp().ssid() + ".local" &&
+        host != "dash.local" &&
+        host != "dash") {
+      sv->send(200, "text/html", kCaptiveHtml);
       return;
     }
     serveFile(*sv, p);
@@ -424,6 +455,7 @@ void Portal::begin() {
 
   sv->on("/", HTTP_GET, [this, sv]() {
     lastClientMs_ = millis();
+    log::info(kTag, "GET / host=%s", sv->hostHeader().c_str());
     serveFile(*sv, "/index.html");
   });
 
