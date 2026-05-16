@@ -43,7 +43,19 @@ void onImuEvent(const dash::ImuEvent& e) {
       break;
     case ImuEventType::DoubleTap:
       dash::log::info("Main", "double-tap");
-      dash::character().react(dash::EyeState::Surprised, 1200);
+      // Double-tap toggles a session: starts one at the saved default length
+      // if idle; ends the active one if mid-session. Only when fully
+      // onboarded — first-boot users go through the portal wizard.
+      if (dash::settings().onboarded()) {
+        auto snap = dash::session().snapshot();
+        if (snap.active) {
+          dash::session().stop(false);
+        } else {
+          dash::session().start(dash::settings().sessionLengthMin());
+        }
+      } else {
+        dash::character().react(dash::EyeState::Surprised, 1200);
+      }
       break;
     case ImuEventType::TripleTap:
       dash::log::info("Main", "triple-tap (deep-sleep gesture)");
