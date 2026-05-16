@@ -182,15 +182,28 @@ void Session::tick() {
   uint32_t totalMs = (uint32_t)targetMin_ * 60UL * 1000UL;
   if (elapsedMs >= totalMs) {
     stop(true);   // celebrate completion
-  } else {
-    // Update progress overlay every 5 seconds to avoid display thrash.
-    static uint32_t lastUiMs = 0;
-    uint32_t now = millis();
-    if (now - lastUiMs >= 5000) {
-      lastUiMs = now;
-      uint8_t pct = (uint8_t)((uint64_t)elapsedMs * 100 / totalMs);
-      display().showProgress(pct);
-    }
+    return;
+  }
+
+  // Mid-session encouragement at the halfway mark: brief happy reaction,
+  // then back to focused. Fires once per session.
+  static bool firedHalfway = false;
+  if (!firedHalfway && elapsedMs >= totalMs / 2 && elapsedMs < totalMs / 2 + 2000) {
+    log::info(kTag, "halfway! brief encouragement");
+    character().react(EyeState::Happy, 1500);
+    firedHalfway = true;
+  }
+  // Reset the halfway flag any time elapsed is back near zero — protects
+  // against the static persisting across distinct sessions in the same boot.
+  if (elapsedMs < 5000) firedHalfway = false;
+
+  // Update progress overlay every 5 seconds to avoid display thrash.
+  static uint32_t lastUiMs = 0;
+  uint32_t now = millis();
+  if (now - lastUiMs >= 5000) {
+    lastUiMs = now;
+    uint8_t pct = (uint8_t)((uint64_t)elapsedMs * 100 / totalMs);
+    display().showProgress(pct);
   }
 }
 
