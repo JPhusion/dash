@@ -143,6 +143,28 @@
 - No way for the user to preview the sounds on host machine — generator
   outputs `.raw` not `.wav`. Could add a `--wav` flag later for QA.
 
-## M4..M12
+## M4 — Eye States & Character System ✅
+
+**Done**
+- `dash::Character` — personality layer that drives the eye library above the
+  raw `Display::setEyeState()` API.
+- Boot animation: splash → surprised → searching → blink → settle to resting
+  state.
+- Mood enum: Neutral / Focused / Excited / Tired / Listening / Playful.
+  Resting eye state derives from mood; other modules set the mood (Session
+  module will set Focused; Game module will set Playful; etc.).
+- `react()` API: temporarily overrides resting state for a hold time, then
+  returns. IMU events (double-tap, shake) now go through this so reactions
+  don't get stuck.
+- Idle quirks: low-priority task on core 1 fires occasional blinks, glances,
+  micro-emotions every 8-25 s. Quirk probability depends on mood (Focused has
+  fewer interruptions; Playful gets heart-eyes and celebrations).
+- Eye state mapping in `Display::applyEyeState()` covers all 20 enum values,
+  using closest emotion preset from the eye library.
+
+**Tested**
+- Build clean. Will verify boot animation on hardware after the next upload.
+
+## M5..M12
 
 (Pending.)

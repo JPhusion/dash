@@ -11,6 +11,7 @@
 
 #include "dash/audio.h"
 #include "dash/build_info.h"
+#include "dash/character.h"
 #include "dash/display.h"
 #include "dash/idle_manager.h"
 #include "dash/imu.h"
@@ -36,17 +37,18 @@ void onImuEvent(const dash::ImuEvent& e) {
       break;
     case ImuEventType::DoubleTap:
       dash::log::info("Main", "double-tap");
-      dash::display().setEyeState(dash::EyeState::Surprised);
+      dash::character().react(dash::EyeState::Surprised, 1200);
       break;
     case ImuEventType::TripleTap:
       dash::log::info("Main", "triple-tap (deep-sleep gesture)");
-      dash::display().setEyeState(dash::EyeState::Sleepy);
+      dash::character().react(dash::EyeState::Sleepy, 600);
+      dash::sounds::play(dash::sounds::kSleep);
       delay(500);
       dash::power().enterDeepSleep(0);
       break;
     case ImuEventType::Shake:
       dash::log::info("Main", "shake (mag=%.2f)", e.magnitude);
-      dash::display().setEyeState(dash::EyeState::Confused);
+      dash::character().react(dash::EyeState::Confused, 1200);
       break;
     case ImuEventType::OrientationChange:
       dash::log::info("Main", "face: %s -> %s",
@@ -103,11 +105,7 @@ void setup() {
 
   // Display first — it owns u8g2 / I2C init.
   if (dash::display().begin()) {
-    dash::display().showBootSplash();
     dash::display().start();
-    delay(800);
-    dash::display().clearOverlay();
-    dash::display().setEyeState(dash::EyeState::Idle);
   }
 
   if (dash::imu().begin()) {
@@ -127,13 +125,18 @@ void setup() {
   dash::touch().onEvent(onTouchEvent);
   dash::touch().start();
 
+  // Character first so it can drive the boot animation.
+  dash::character().begin();
+  dash::character().start();
+
   // State machine + idle manager.
   dash::stateMachine().transitionTo(dash::DeviceState::Idle);
   dash::idleManager().begin();
   dash::idleManager().start();
 
-  // Boot chime (silent under DASH_SILENT_AUDIO).
+  // Boot chime + animation (chime silent under DASH_SILENT_AUDIO).
   dash::sounds::play(dash::sounds::kBoot);
+  dash::character().playBootAnimation();
 
   dash::log::info("Main", "setup complete");
 }
