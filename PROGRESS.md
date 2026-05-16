@@ -72,9 +72,45 @@
 
 ---
 
-## M2 — Power Management & State Machine ⏳
+## M2 — Power Management & State Machine ✅
 
-(Pending — module headers/code drafted, not yet committed.)
+**Done**
+- `dash::Power` — CPU profile (80 / 240 MHz), deep-sleep entry that cuts radios
+  (WiFi off, esp_wifi_stop, btStop), enables cap-touch wake on T7, optional
+  timer wake, and `gpio_hold_en()` for the I2S DOUT pin across sleep. Build
+  flag `DASH_NO_DEEP_SLEEP` short-circuits to a logged no-op.
+- RTC_DATA_ATTR variables for `rtcBootCount`, `rtcLastOtaCheckUnix`,
+  `rtcLastSleepUnix`, `rtcLastSleepMillis` — survive deep sleep without flash
+  writes.
+- `dash::StateMachine` — single-owner FSM with logger and listener pattern.
+  States: Booting, Onboarding, Idle, Drowsy, Asleep, AwakeForSession,
+  InSession, InMenu, InGame, GroupSessionWaiting, GroupSessionActive,
+  OtaChecking. Helpers `isInteractive()` / `wantsPerformance()`.
+- `dash::IdleManager` — ticks every 500 ms, walks Idle -> Drowsy1..5 -> Asleep
+  using configurable timeout (default 180 s). Any IMU event, touch event, or
+  state transition out of Idle resets the clock. Switches CPU to 80 MHz at
+  drowsy 1+, back to 240 MHz on return to Idle.
+- Main loop adds two extra gestures: triple-tap → immediate deep sleep,
+  face-down for > 2 s → fast-path deep sleep.
+- Boot path logs `Power::begin()` first so `boot_count` and `wake_cause`
+  appear before any other module touches state.
+
+**Tested on hardware**
+- Cold boot: `boot #1 wake_cause=0`, state transitions to Idle within ~1.5 s,
+  240 MHz CPU, ~230 KB free heap.
+- State machine logs every transition (e.g. `[State] Booting -> Idle`).
+- Idle progression not yet observed (would take 3 min; deferred to morning).
+- Deep sleep paths flagged off by `DASH_NO_DEEP_SLEEP`; logs `deep sleep
+  skipped` when triple-tap / face-down gestures fire.
+
+**Open issues / deferred**
+- Wake-on-motion IMU INT not wired on v1 hardware → only touch + timer wake
+  available. The face-down fast-path mitigates this for "putting Dash to bed".
+- IdleManager calls `Display::setEyeState()` directly; the Drowsy1..5 states
+  currently all map to library's `Sleepy` preset. M4 adds intermediate
+  emotion intensities.
+
+---
 
 ## M3..M12
 
