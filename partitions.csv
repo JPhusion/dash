@@ -1,12 +1,17 @@
 # Dash partition table for ESP32-WROOM 16MB flash.
-# OTA dual app slots (1.5MB each), LittleFS for assets/logs, encrypted NVS,
-# and a coredump region for post-mortem diagnostics.
+#
+# Layout chosen to be compatible with the Arduino-ESP32 prebuilt bootloader,
+# which requires app0 at offset 0x10000. nvs_keys / encryption is deferred to
+# M8 (see wiki/decisions.md ADR-005) — adding it here without a matching
+# custom bootloader build traps the chip in a silent boot loop.
+#
+# Dual OTA app slots (1.5MB each), LittleFS for assets/logs, and a coredump
+# region at the tail of flash for post-mortem diagnostics.
 #
 # Name,     Type, SubType,  Offset,    Size,     Flags
 nvs,        data, nvs,      0x9000,    0x5000,
 otadata,    data, ota,      0xe000,    0x2000,
-nvs_keys,   data, nvs_keys, 0x10000,   0x1000,   encrypted
-coredump,   data, coredump, 0x11000,   0x10000,
-app0,       app,  ota_0,    0x30000,   0x180000,
-app1,       app,  ota_1,    0x1B0000,  0x180000,
-littlefs,   data, spiffs,   0x330000,  0xCD0000,
+app0,       app,  ota_0,    0x10000,   0x180000,
+app1,       app,  ota_1,    0x190000,  0x180000,
+spiffs,     data, spiffs,   0x310000,  0xCE0000,
+coredump,   data, coredump, 0xFF0000,  0x10000,

@@ -51,26 +51,12 @@ draws additional overlay graphics on top of the eye buffer.
 
 ## ADR-004 — Partition table layout
 
-**Decision.** Use the prompt-supplied table:
-
-```
-nvs       0x9000   20K
-otadata   0xe000    8K
-nvs_keys  0x10000   4K   (encrypted flag)
-coredump  0x11000  64K
-app0      0x30000 1.5M
-app1      0x1B0000 1.5M
-littlefs  0x330000 13M
-```
-
-**Why.** 1.5 MB app partitions are generous for the foreseeable feature set
-(current bring-up is ~600 KB). 13 MB of LittleFS leaves plenty for sounds,
-cosmetics, captive portal assets, and rolling session logs. The encrypted
-`nvs_keys` partition is required by `nvs_flash` for AES-XTS encryption of the
-main `nvs` partition.
-
-**Gap.** ~60 KB between `coredump` end (0x21000) and `app0` start (0x30000).
-Required because app partitions must be 64-KB aligned. Accepted.
+**Decision (revised).** See ADR-005b. The originally-proposed table from the
+build prompt (app0 at 0x30000, dedicated `nvs_keys`, coredump near the
+bootloader) was not compatible with the Arduino-ESP32 prebuilt bootloader.
+Final layout uses Arduino's default 16 MB skeleton: app0 at 0x10000, 1.5 MB
+app slots, 13 MB LittleFS, coredump at end. Partition for filesystem must be
+named `spiffs` for `LittleFS.begin()` to find it.
 
 **Revisit if.** App size approaches 1.4 MB (shrink LittleFS, grow app).
 
@@ -78,15 +64,55 @@ Required because app partitions must be 64-KB aligned. Accepted.
 
 ## ADR-005 — NVS encryption (deferred to M8)
 
-**Decision.** Reserve the `nvs_keys` partition now but defer wiring up
-encryption until M8 (onboarding), when Wi-Fi credentials first land in NVS.
+**Decision.** Defer NVS encryption to M8 (onboarding), when Wi-Fi credentials
+first land in flash. The `nvs_keys` partition is **not** allocated in the v1
+partition table.
 
-**Why.** Empty NVS doesn't need encryption. Encrypting the partition requires
-flashing keys via `espsecure.py generate_flash_encryption_key` and a couple
-extra build steps that are not worth blocking M0 on.
+**Why.** Empty NVS doesn't need encryption. More importantly, the Arduino-ESP32
+prebuilt bootloader does not support `nvs_keys` as a partition subtype — adding
+that row caused the second-stage bootloader to fail silently and trap the chip
+in a boot loop (SW_RESET cycles, no app output). When we want encryption we'll
+either compile a custom bootloader via `platform_packages` overrides or
+implement application-level AES blob encryption inside ordinary NVS.
 
-**Revisit at.** M8 — flesh out `tools/keys/` workflow and document in
-`wiki/development.md`.
+**Revisit at.** M8 — see `wiki/development.md` for the workflow when picked up.
+
+---
+
+## ADR-005b — Partition table compat with Arduino-ESP32 prebuilt bootloader
+
+**Decision.** Use the Arduino-ESP32 default 16 MB layout as the structural
+template:
+
+```
+nvs       0x9000   20K
+otadata   0xe000    8K
+app0      0x10000  1.5M     ← MUST start at 0x10000
+app1      0x190000 1.5M
+spiffs    0x310000 13M      ← MUST be named "spiffs" so LittleFS finds it
+coredump  0xFF0000 64K
+```
+
+**Why.** Two hard requirements baked into the prebuilt Arduino bootloader and
+Arduino's LittleFS wrapper, discovered the hard way:
+
+1. **app0 MUST begin at offset 0x10000.** The prebuilt bootloader looks for
+   the active OTA app at that fixed offset. Putting app0 anywhere else (we
+   tried 0x30000 to leave room for `coredump`) results in `rst:0x3 (SW_RESET)`
+   on every boot with no second-stage bootloader output. Coredump goes at the
+   *end* of flash instead.
+
+2. **LittleFS opens its partition by NAME = "spiffs", not subtype.** Even
+   though the subtype is `spiffs`, naming the partition "littlefs" caused
+   `LittleFS.begin()` to return error 261 (partition not found).
+
+3. **Board flash-size override is required.** `board = esp32dev` defaults to
+   `flash_size = 4MB` in the PlatformIO board definition. Without
+   `board_build.flash_size = 16MB` + `board_upload.flash_size = 16MB`, the
+   bootloader is built for 4 MB and ignores anything past `0x400000`.
+
+**Revisit if.** We adopt a custom bootloader build (e.g., to enable NVS
+encryption or flash-level secure boot) — then we can rearrange freely.
 
 ---
 
