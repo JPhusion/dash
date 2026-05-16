@@ -1,0 +1,12 @@
+{
+  "name": "eyes",
+  "version": "1.0.0",
+  "description": "Animated eye/face rendering library for monochrome OLED. Adapted from Luis Llamas's RoboticEyes (AGPL-3.0) with extensions by Alastair Aitchison / Playful Technology.",
+  "keywords": ["eyes", "face", "oled", "u8g2", "animation"],
+  "license": "AGPL-3.0-or-later",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": {
+    "olikraus/U8g2": "^2.35.30"
+  }
+}
