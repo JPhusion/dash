@@ -473,6 +473,11 @@ function bind() {
 
   $$(".tab").forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
 
+  // Theme picker.
+  $$("#theme-chips .chip").forEach(c => {
+    c.addEventListener("click", () => applyTheme(c.dataset.theme));
+  });
+
   // Konami code easter egg.
   let buf = [];
   const code = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"];
@@ -489,10 +494,27 @@ async function konami() {
 }
 
 /* =========================================================================
+ * Theme (frontend-only, persisted in localStorage)
+ * ========================================================================= */
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("dash.theme", theme);
+  $$("#theme-chips .chip").forEach(c =>
+    c.setAttribute("aria-pressed", c.dataset.theme === theme));
+}
+
+function loadSavedTheme() {
+  const t = localStorage.getItem("dash.theme") || "warm";
+  applyTheme(t);
+}
+
+/* =========================================================================
  * Boot
  * ========================================================================= */
 
 async function boot() {
+  loadSavedTheme();
   bind();
   await timeSync();
   // Redirect first-boot users to the wizard.
