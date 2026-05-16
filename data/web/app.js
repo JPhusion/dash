@@ -454,8 +454,21 @@ function bind() {
   $("btn-factory-reset").addEventListener("click", factoryReset);
   $("btn-group-study").addEventListener("click", startGroupStudy);
 
+  // Volume slider: live label + debounced API call so user hears a test
+  // tick at the new level. Throttled to one /api/config write per second to
+  // avoid NVS thrash while the user drags the slider.
+  let volTimer = null;
   $("cfg-volume").addEventListener("input", (e) => {
     $("vol-label").textContent = e.target.value;
+    clearTimeout(volTimer);
+    volTimer = setTimeout(() => {
+      const v = Number(e.target.value);
+      api("/api/config", {
+        method: "POST",
+        body: JSON.stringify({ volume: v }),
+      }).then(() => api("/api/test-tone", { method: "POST" }))
+        .catch(() => {});
+    }, 700);
   });
 
   $("btn-toggle-pw").addEventListener("click", () => {

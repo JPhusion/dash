@@ -5,16 +5,18 @@
 #include <Preferences.h>
 #include <WebServer.h>
 
+#include "dash/audio.h"
 #include "dash/build_info.h"
 #include "dash/character.h"
-#include "dash/imu.h"
-#include "dash/log.h"
-#include "dash/power.h"
 #include "dash/esp_now_dash.h"
 #include "dash/games.h"
+#include "dash/imu.h"
+#include "dash/log.h"
 #include "dash/ota.h"
+#include "dash/power.h"
 #include "dash/session.h"
 #include "dash/settings.h"
+#include "dash/sounds.h"
 #include "dash/state_machine.h"
 #include "dash/stats.h"
 #include "dash/wifi_ap.h"
