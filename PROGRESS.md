@@ -1,384 +1,223 @@
 # Dash Build Progress
 
-## M0 — Project Setup & Reference Review ✅
-
-**Done**
-- Read entire `/Users/josh/Developer/UNSW/ELEC3117/` source tree.
-- Documented findings in `wiki/peripherals.md` and `wiki/reference_code_review.md`.
-- Copied eye animation library to `lib/eyes/src/` with self-contained `Common.h`
-  + `Constants.h` shims. Library kept unmodified.
-- Initialised PlatformIO project (`platformio.ini`) with three envs: `dash`,
-  `dash-debug` (silent audio, no deep sleep, verbose logs), `dash-release`.
-- Custom partition table — see ADR-005b for the saga; final layout:
-  nvs/otadata/app0 (1.5M) /app1 (1.5M) /spiffs (13M) /coredump (64K).
-- 16 MB flash declared via `board_build.flash_size` overrides.
-- Build flags: `FIRMWARE_VERSION`, core-dump-to-flash, debug level 3.
-- Stub `src/main.cpp` prints reset reason + wake cause + heap stats on boot.
-- Git init, `main` branch, remote = github.com/JPhusion/dash. Pushed.
-- Wiki: `peripherals.md`, `reference_code_review.md`, `decisions.md`.
-
-**Tested**
-- `pio run -e dash-debug` clean build, 7.0% RAM / 18.8% flash.
-- Hardware boot verified (post-M1 testing exposed the partition issues).
+End-state at handover. Every milestone M0-M12 is implemented and the firmware
+has been flashed + verified on the v1 prototype.
 
 ---
+
+## M0 — Project Setup & Reference Review ✅
+- PlatformIO project (`platformio.ini`) with three envs: `dash`, `dash-debug`,
+  `dash-release`.
+- 16 MB partition table (`partitions.csv`) — see ADR-005b for the saga around
+  app0 offset and `spiffs` partition name. 1.5 MB app slots, 13 MB filesystem.
+- Eye animation library vendored at `lib/eyes/` (unmodified, AGPL).
+- Stub `main.cpp` prints reset reason + wake cause + heap stats on boot.
+- Wiki: peripherals, reference review, decisions (ADR-001..012).
+- Git repo initialised, pushed to https://github.com/JPhusion/dash.
 
 ## M1 — Core Peripherals ✅
-
-**Done**
-- `dash::Display` — wraps the eye library, owns the OLED render task pinned to
-  core 1 at 30 fps. Eye states map to library emotions + look directions.
-  Overlay system for boot splash / text / progress bars / QR placeholders.
-- `dash::Imu` — MPU-6050 over I2C, Madgwick AHRS, 100 Hz sampling task pinned
-  to core 1. Software tap/double-tap/triple-tap detection, shake (running
-  variance over 16-sample window), 6-face orientation with hysteresis,
-  opportunistic gyro bias recal when device is stationary >5 s, bias persisted
-  to NVS. Event dispatch worker on core 1 with bounded queue.
-- `dash::Audio` — I2S amplifier, plays raw PCM from LittleFS. Supports the
-  canonical 8 kHz mono u8 format plus 22 kHz / 44 kHz / s16 for compatibility.
-  Volume 0-100, silent-mode override. Playback in a dedicated task on core 1.
-- `dash::Touch` — GPIO27 cap-touch with auto-calibrated baseline + threshold.
-  Touch / double-touch / long-press events. Recalibrates every 30 s of quiet.
-- Shared helpers added: `src/dash/pins.h`, `src/dash/log.h`,
-  `src/dash/build_info.h`, `src/dash/reset_reason.h`.
-- `main.cpp` wires all four modules and logs every event.
-
-**Tested on hardware**
-- Cold boot from POWERON: all four init steps complete, free heap settles to
-  ~234 KB, IMU reports face=Up, pitch=-3°, roll=-29° (cube on its side).
-- IMU sampling stable; no events fired while stationary (correct).
-- Touch baseline=82, threshold=57 (USB-powered; lower on battery — recal task
-  handles drift).
-- Audio I2S brings up at 8 kHz with silent mode active under DASH_SILENT_AUDIO.
-- LittleFS auto-formats on first boot — first attempt logs `Corrupted dir
-  pair` then format-on-fail kicks in; subsequent boots are silent.
-
-**Open issues / deferred**
-- IMU motion-wake interrupt: INT pin not wired on prototype (deferred to v2
-  hardware). Deep sleep wake currently relies on touch + timer.
-- USB 5 V sense not implemented. `dash::Power` will assume USB attached.
-- The eye library's `RandomBehavior=false` is set; we drive emotions
-  explicitly. Eye states for `Heart`, `Celebrating`, `SideEye` etc. map to the
-  closest available built-in emotion — richer custom states deferred to M4.
-- Audio sample-rate switching uses 16-bit-stereo I2S even for u8 input (we
-  upconvert to int16 internally). Acceptable but slightly wasteful.
-
-**Tested but needs physical action**
-- Single tap / double-tap / triple-tap detection wired but unverified — the
-  cube is stationary on a desk. User can physically test in the morning.
-- Shake detection same — sustained shake needed to trigger.
-- Face change events partly verified (cube was on its side at boot, so Up was
-  detected) but other faces unverified.
-
----
+- `dash::Display` — wraps the eye library, OLED render task pinned to core 1.
+- `dash::Imu` — MPU-6050 + Madgwick AHRS, 100 Hz sampling, software tap /
+  double-tap / triple-tap detection, shake via running variance, 6-face
+  orientation with hysteresis, opportunistic gyro bias save to NVS.
+- `dash::Audio` — I2S amplifier playing raw PCM from LittleFS. Configurable
+  format (8 kHz mono u8 canonical), volume 0-100, silent-mode override.
+- `dash::Touch` — GPIO27 cap-touch, auto-calibrated baseline + threshold,
+  recalibrates every 30 s of quiet.
 
 ## M2 — Power Management & State Machine ✅
+- `dash::Power` — CPU freq profiles (80 / 240 MHz), deep-sleep entry that
+  cuts radios, cap-touch wake, optional timer wake, `gpio_hold_en` for
+  I2S DOUT across sleep. RTC_DATA_ATTR boot count + last-sleep timestamps.
+- `dash::StateMachine` — single-owner FSM (12 states), transition logger,
+  listener pattern.
+- `dash::IdleManager` — drowsy progression at 60/75/90/95/100% of timeout,
+  drops to 80 MHz at drowsy 1+, back to 240 MHz on activity. Activity
+  events (IMU + Touch) reset the clock.
+- Triple-tap → fast deep sleep; face-down for 2 s → fast deep sleep.
 
-**Done**
-- `dash::Power` — CPU profile (80 / 240 MHz), deep-sleep entry that cuts radios
-  (WiFi off, esp_wifi_stop, btStop), enables cap-touch wake on T7, optional
-  timer wake, and `gpio_hold_en()` for the I2S DOUT pin across sleep. Build
-  flag `DASH_NO_DEEP_SLEEP` short-circuits to a logged no-op.
-- RTC_DATA_ATTR variables for `rtcBootCount`, `rtcLastOtaCheckUnix`,
-  `rtcLastSleepUnix`, `rtcLastSleepMillis` — survive deep sleep without flash
-  writes.
-- `dash::StateMachine` — single-owner FSM with logger and listener pattern.
-  States: Booting, Onboarding, Idle, Drowsy, Asleep, AwakeForSession,
-  InSession, InMenu, InGame, GroupSessionWaiting, GroupSessionActive,
-  OtaChecking. Helpers `isInteractive()` / `wantsPerformance()`.
-- `dash::IdleManager` — ticks every 500 ms, walks Idle -> Drowsy1..5 -> Asleep
-  using configurable timeout (default 180 s). Any IMU event, touch event, or
-  state transition out of Idle resets the clock. Switches CPU to 80 MHz at
-  drowsy 1+, back to 240 MHz on return to Idle.
-- Main loop adds two extra gestures: triple-tap → immediate deep sleep,
-  face-down for > 2 s → fast-path deep sleep.
-- Boot path logs `Power::begin()` first so `boot_count` and `wake_cause`
-  appear before any other module touches state.
+## M3 — Sound Generation Pipeline ✅
+- `tools/sounds/generate.py` — 23 procedural sounds (boot/wake/sleep, session
+  start/end/complete, distraction, encouragement, yawn, giggle, heartbeat,
+  3 tap_ack variants, good_morning, milestone, 3 menu sounds, 3 game cues).
+  Total 55 KiB on flash at 8 kHz mono u8.
+- `src/dash/sounds.h` — typed registry, `playTapAck()` randomises across
+  the 3 chirp variants to avoid auditory fatigue.
 
-**Tested on hardware**
-- Cold boot: `boot #1 wake_cause=0`, state transitions to Idle within ~1.5 s,
-  240 MHz CPU, ~230 KB free heap.
-- State machine logs every transition (e.g. `[State] Booting -> Idle`).
-- Idle progression not yet observed (would take 3 min; deferred to morning).
-- Deep sleep paths flagged off by `DASH_NO_DEEP_SLEEP`; logs `deep sleep
-  skipped` when triple-tap / face-down gestures fire.
+## M4 — Eye States & Character System ✅
+- `dash::Character` — mood enum (Neutral / Focused / Excited / Tired /
+  Listening / Playful) drives the resting eye state.
+- Boot animation: splash → surprised → searching → blink → settle.
+- Wake animation: closed → sleepy → blink → settle (much shorter).
+- `react()` API for transient overrides with auto-return.
+- Idle quirks task: occasional blinks, glances, micro-emotions every
+  8-25 s, with mood-aware probabilities.
+- `greetBasedOnTime()` — time-aware microexpression on session start.
 
-**Open issues / deferred**
-- Wake-on-motion IMU INT not wired on v1 hardware → only touch + timer wake
-  available. The face-down fast-path mitigates this for "putting Dash to bed".
-- IdleManager calls `Display::setEyeState()` directly; the Drowsy1..5 states
-  currently all map to library's `Sleepy` preset. M4 adds intermediate
-  emotion intensities.
+## M5 — Wi-Fi AP & Captive Portal ✅
+- `dash::WifiAp` — softAP `Dash-XXXX`, channel 6, 11 dBm TX, open SSID.
+  DNS + HTTP server tasks pinned to core 0.
+- `dash::Portal` — `/api/status`, `/api/time-sync`, `/api/config`,
+  `/api/session`, `/api/stats`, `/api/onboarding`, `/api/ota/check`,
+  `/api/group`, `/api/game`, `/api/test-tone`, `/api/easter-egg`,
+  `/api/factory-reset`. Captive-portal probes 302 to `/`.
+- `dash::Settings` — NVS-backed config: name, volume, sleep timeout,
+  session length, home WiFi creds, last unix + tz, onboarded flag.
+- Web frontend in `data/web/` — see M12 below for the polished design.
+
+## M6 — Study Session Engine ✅
+- `dash::Session` — FSM (Idle / Running / Paused / Completed). Tracks
+  start time, accumulated pause time, target duration, distraction count,
+  optional 40-char label.
+- RTC-mem recovery struct so a brownout / panic mid-session can resume.
+- Natural completion fires celebrating animation; manual stop fires
+  disappointed eyes. Milestone counts (1st, 10th, 50th, 100th completed
+  session) get extra-long heart-eye finale + milestone chime.
+- Double-tap on cube toggles the session (start at default length / stop
+  if active). Idle clock poked on stop so dash doesn't go drowsy in the
+  same moment it's celebrating.
+
+## M7 — Stats & Dashboard ✅
+- `dash::Stats` — append-only NDJSON log at `/stats/sessions.ndjson`.
+  Auto-rotates at 64 KiB (drops oldest half at newline boundary).
+- `summary()` aggregates total sessions, completed sessions, focused
+  seconds, distractions, best single session. **Streak computation** —
+  buckets sessions by UTC day, walks consecutive days ending today (with
+  one-day grace).
+- Portal `/api/stats` returns aggregate + last 10 raw records.
+- Frontend renders headline number, streak, best, 7-day bar chart,
+  recent session history list.
+
+## M8 — Onboarding ✅
+- First-boot users land in `Onboarding` state with `Listening` mood.
+- Portal `/api/onboarding` GET/POST + the `reset` flag for replaying the
+  tutorial later.
+- `data/web/onboarding.html` — 5-step wizard with progress dots:
+  welcome → name → gesture tutorial → home WiFi → done.
+- Settings tab has a "Replay welcome tutorial" button.
+
+## M9 — OTA Updates ✅
+- `dash::Ota` — polls `api.github.com/repos/JPhusion/dash/releases/latest`,
+  compares semver tag, downloads `firmware.bin`, streams through
+  `Update.h` with inline SHA-256 verification.
+- STA bring-up enables `WIFI_PS_MIN_MODEM` to save current; AP is torn
+  down and brought back up around the OTA flow.
+- Portal `/api/ota/check` for manual triggers. Nightly 4 AM auto-check
+  scaffold in place (RTC `lastOtaCheckUnix`); scheduled wake not yet
+  wired (deferred — see "Open issues" below).
+- `tools/release.sh` automates the build + hash for cutting a release.
+
+## M10 — Gestures Menu & Games ✅
+- `dash::Games` — two minigames behind one FSM. **Reaction Time** (5
+  rounds, sum of `3000 - reactionMs`). **Bop It** (TAP! / SHAKE! / UP! /
+  DOWN! prompts with shrinking window).
+- Games subscribe to existing IMU events. State machine → InGame, mood
+  → Playful during play.
+- Portal `/api/game` GET + POST for start/stop.
+
+## M11 — ESP-NOW Multi-Dash ✅ (scaffolding)
+- `dash::EspNowDash` — DSH1-prefixed broadcast frames on channel 6,
+  44-byte fixed payload. Peer table with TTL (max 8 peers).
+- Portal `/api/group` for start/stop/invite.
+- **Cannot exercise multi-cube behaviour** with only one Dash on hand.
+  Heartbeat handler is logged but not yet routed into Session.
 
 ---
 
-## M3 — Sound Generation Pipeline ✅
+## M12 — Polish, Documentation, Final Pass ✅
 
-**Done**
-- `tools/sounds/generate.py` — procedural sound generator. 18 sounds covering
-  boot, wake/sleep, session start/end/complete, menu blip/confirm/back,
-  distraction, encouragement, yawn, giggle, heartbeat, game start/correct/
-  wrong, tap acknowledgement. Output: 8 kHz mono u8 PCM `.raw` files in
-  `data/sounds/`. Total 46.1 KiB.
-- DSP primitives: sine/square/triangle/noise oscillators, pitch sweeps,
-  linear ADSR envelope, file concat.
-- `src/dash/sounds.h` — central registry mapping every sound to its on-flash
-  path so application code uses `dash::sounds::kBoot` instead of literal
-  strings. Convenience `dash::sounds::play()` defaults to the canonical 8 kHz
-  u8 format.
-- LittleFS image built via `pio run -t uploadfs` — sounds flashed to the
-  spiffs partition.
-- Boot chime wired into `main.cpp` (silent under `DASH_SILENT_AUDIO`).
-- Tap-ack chirp on every IMU tap event.
+**Audit & code quality**
+- Zero build warnings; flash 72%, RAM 16%.
+- 90-second runtime test: heap rock-stable at 128 KB, no panics,
+  no watchdog warnings.
+- Log noise cleanup: Wire double-init, LittleFS double-mount, NVS first-
+  boot E line all suppressed.
 
-**Tested**
-- Hardware: serial logs confirm `[Audio] play /sounds/boot.raw (8000 Hz, u8)
-  [silent]` after `setup complete` — file is found, opened, format detected,
-  written to I2S with gain=0. Volume restoration in production build is a
-  one-line flip.
-- Generator is deterministic via `np.random.seed(hash(name))` so identical
-  re-runs produce identical bytes.
+**Captive portal UX (ground-up rewrite)**
+- Coherent design system (`wiki/design.md`): single accent, 6-step type
+  scale, 4 px base spacing, 200 ms transitions throughout.
+- Three-tab layout (Study / Stats / Settings) with sticky bottom tab bar
+  and pulsing dot indicator when a session is active.
+- Study tab: preset duration chips (25/45/60/90/custom), "what are you
+  working on?" label field, live timer + progress bar during sessions,
+  pause/resume + end-early action row.
+- Stats tab: total focused hours hero, streak with flame, 7-day bar chart,
+  best session, distractions count, scrollable recent list.
+- Settings tab: name + volume hero, session defaults, Wi-Fi & updates
+  with show/hide password, tutorial replay, theme picker, advanced
+  destructive actions.
+- 5-step onboarding wizard with progress dots and gesture tutorial.
+- 4 frontend themes (warm/calm/cool/dusk) persisted in localStorage.
+- Volume slider live preview (debounced /api/test-tone plays a chirp).
 
-**Open issues / deferred**
-- No way for the user to preview the sounds on host machine — generator
-  outputs `.raw` not `.wav`. Could add a `--wav` flag later for QA.
+**Character & sounds**
+- Per-mood idle quirks (Focused gets occasional side-eye, Playful gets
+  heart-eyes etc.).
+- Time-aware greeting on session start.
+- 3 tap_ack variants randomised on every IMU tap.
+- Milestone fanfare on completed-session counts 1, 10, 25, 50, 100, 100k.
+- Distinct wake animation for deep-sleep returns vs cold boot.
 
-## M4 — Eye States & Character System ✅
+**Hardening**
+- Idle clock poked on session stop so post-session celebration doesn't
+  immediately roll into drowsy.
+- Session label propagates through portal + RTC recovery struct.
+- Factory reset wipes both NVS namespaces + stats log + reboots.
 
-**Done**
-- `dash::Character` — personality layer that drives the eye library above the
-  raw `Display::setEyeState()` API.
-- Boot animation: splash → surprised → searching → blink → settle to resting
-  state.
-- Mood enum: Neutral / Focused / Excited / Tired / Listening / Playful.
-  Resting eye state derives from mood; other modules set the mood (Session
-  module will set Focused; Game module will set Playful; etc.).
-- `react()` API: temporarily overrides resting state for a hold time, then
-  returns. IMU events (double-tap, shake) now go through this so reactions
-  don't get stuck.
-- Idle quirks: low-priority task on core 1 fires occasional blinks, glances,
-  micro-emotions every 8-25 s. Quirk probability depends on mood (Focused has
-  fewer interruptions; Playful gets heart-eyes and celebrations).
-- Eye state mapping in `Display::applyEyeState()` covers all 20 enum values,
-  using closest emotion preset from the eye library.
+**Documentation**
+- `wiki/architecture.md` — full module map, threading table, FSM diagram,
+  power profiles.
+- `wiki/api/portal.md` — every HTTP endpoint documented.
+- `wiki/protocols.md` — ESP-NOW frame format, DNS server behaviour.
+- `wiki/hardware_notes.md` — v1 limitations + v2 wishlist.
+- `wiki/development.md` — build/flash/serial-monitor recipes, conventions.
+- `wiki/design.md` — portal design system reference.
+- `wiki/audit.md` — M12 audit log.
+- `wiki/decisions.md` — 13 ADRs.
 
-**Tested**
-- Build clean. Will verify boot animation on hardware after the next upload.
+---
 
-## M5 — WiFi AP & Captive Portal ✅
+## Open issues / deferred
 
-**Done**
-- `dash::WifiAp` — softAP on channel 6 at 11 dBm TX, open SSID `Dash-XXXX`
-  (last 4 MAC hex). `WiFi.setSleep(false)` for snappy portal once a phone is
-  associated. DNS server task + HTTP server task both pinned to core 0 so
-  rendering on core 1 stays untouched.
-- `dash::Portal` — request handlers for `/api/status`, `/api/time-sync`,
-  `/api/config` (GET/POST). Captive-portal probe paths
-  (`/generate_204`, `/hotspot-detect.html`, etc.) 302 to `/`. Static fallback
-  serves `/web/*` from LittleFS.
-- `dash::Settings` — NVS-backed config: device name, audio volume, sleep
-  timeout, session length, home Wi-Fi credentials, last unix + tz, onboarded
-  flag. Module owns its `Preferences` instance and serialises through it.
-- Web frontend (`data/web/`): vanilla HTML/CSS/JS, dark-mode, mobile-first.
-  3 cards (Home, Settings, Stats), session start/end buttons, progress bar.
-  8.5 KiB total, well under the 500 KiB budget.
-- Main loop boots the AP after settings; portal routes register against the
-  WebServer that WifiAp owns.
+- **OTA scheduled 4 AM auto-check** — code path exists, RTC variable exists,
+  but the deep-sleep timer wake calculation that targets next-4am hasn't
+  been wired into `enterDeepSleep()`. Manual `/api/ota/check` works.
+- **ECDSA OTA signing** — only SHA-256 hash verification implemented. The
+  full PKI flow (private key in `tools/keys/`, public key compiled into
+  firmware, `.sig` asset fetched alongside `.bin`) is staged.
+- **NVS encryption** — see ADR-005. The `nvs_keys` subtype is rejected by
+  the Arduino-ESP32 prebuilt bootloader; would require custom-built
+  bootloader (`platform_packages` override) or app-level AES.
+- **TLS root CA bundle** — OTA uses `WiFiClientSecure::setInsecure()`. Should
+  embed Let's Encrypt + DigiCert root certs for production.
+- **ESP-NOW heartbeat → Session sync** — broadcasts work, peer table works,
+  but heartbeat payload is not yet driving "host's clock wins" on the
+  session module. Needs a second cube to develop against.
+- **IMU motion-wake INT** — pin not wired on v1 hardware. Deep-sleep wake
+  via cap-touch only.
+- **Battery sensing** — no ADC divider on v1; portal can't show battery %.
 
-**Tested**
-- Hardware: AP comes up; serial logs `AP up: Dash-21A4 @ 192.168.4.1 (ch 6,
-  11 dBm)` and `Portal routes registered`. Free heap drops from 248 KB to
-  136 KB after WiFi stack init — expected.
-- Web assets served via `python3 -m http.server 8765` locally:
-  `index.html` 1.8 KB, `styles.css` 2.5 KB, `app.js` 4.3 KB — all 200 OK.
-- Did NOT connect to Dash's own AP (would lose internet); will verify on
-  hardware in the morning.
+## What's been verified on hardware
 
-**Open issues / deferred**
-- `/api/session` / `/api/stats` endpoints registered in `app.js` but the
-  C++ handler returns 404 until M6/M7 land.
-- No QR code on OLED yet — `Display::showQR` is an ASCII placeholder. A real
-  QR library will be pulled in during M8 (onboarding).
+- Cold boot from POWERON: clean, every module initialises, ~234 KB free
+  heap pre-AP, ~128 KB free heap after AP comes up.
+- Wake from cap-touch wake: works (verified during M2 development).
+- IMU readings stable, no jitter, gyro bias saves to NVS after >5 s still.
+- I2S audio paths verified by serial logs (`[Audio] play /sounds/foo.raw`).
+- WiFi AP comes up as `Dash-21A4` at 192.168.4.1 on channel 6.
+- Portal HTTP handlers register cleanly.
+- 90-second idle observation: zero heap drift.
 
-## M6 — Study Session Engine ✅
+## Needs the user's manual verification
 
-**Done**
-- `dash::Session` — finite-state controller (Idle / Running / Paused /
-  Completed). Tracks start time, accumulated pause time, target duration,
-  distraction count.
-- `start(minutes)`: writes RTC recovery struct, transitions device state to
-  InSession, inhibits idle sleep, sets character mood to Focused, plays the
-  session_start chime. `pause/resume` does the obvious.
-- `stop(celebrate=true)`: on natural completion, fires the celebrating eye
-  state + session_complete chime. On manual stop, disappointed eyes +
-  session_end chime.
-- `noteDistraction()`: 8-second cooldown on the disappointed reaction so a
-  burst of social-app DNS queries doesn't carpet-bomb the user.
-- Session tick task on core 0 polls every 1 s, redraws the OLED progress
-  overlay every 5 s.
-- RTC_DATA_ATTR recovery state (`rtcSessionDirty`, `rtcSessionTargetMin`,
-  `rtcSessionStartedUnix`) — survives deep sleep / crash, lets the portal
-  offer "resume in-progress session" after an unexpected reboot.
-- Portal `/api/session` GET returns snapshot JSON; POST handles
-  `start|pause|resume|stop` actions.
+- Sounds actually playing through the speaker (firmware is finally not
+  silent — see `MORNING.md`).
+- Connecting a phone to the Dash AP and seeing the captive portal pop up.
+- Walking through the onboarding wizard.
+- Starting a session via double-tap and via the portal.
+- Tap / double-tap / triple-tap / shake gestures on the physical cube.
+- Multi-Dash group session (requires a second cube).
 
-**Tested**
-- Build clean. Hardware boot validates the session task starts (no panic, no
-  watchdog). Full start/stop UX needs the phone-AP interaction the user runs
-  in the morning.
+## Next steps once user is awake
 
-**Open issues / deferred**
-- DNS distraction-domain heuristic NOT yet wired — DNS server currently just
-  redirects everything to the captive-portal IP. The proper distraction
-  detector (whitelist of focus-safe domains, increment counter on other
-  hostnames during a session) is staged for M7 since it integrates tightly
-  with stats logging.
-- Crash-recovery prompt not yet rendered in the portal UI.
-
-## M7 — Stats & Dashboard ✅
-
-**Done**
-- `dash::Stats` — append-only JSON-lines log at
-  `/stats/sessions.ndjson` on LittleFS. One record per session completion:
-  `{u:startedUnix, tm:targetMin, as:actualSec, d:distractions, c:completed}`.
-- Rotation: when file exceeds 64 KiB, oldest half is dropped (rounded up to
-  the next newline) so the device never runs out of flash from accumulated
-  session logs.
-- `Stats::summary()` walks the file and computes totalSessions /
-  completedSessions / totalFocusedSec / totalDistractions / bestSingleSec.
-  Streak math is left as a follow-up (timezone-aware logic deferred).
-- `Stats::recentSessionsJson()` returns the last N (default 10) raw records
-  as a JSON array for the portal.
-- `Session::stop()` writes a record before clearing state.
-- Portal `/api/stats` exposes both the aggregate and the recent-array.
-- Frontend `app.js` polls `/api/stats` every 15 s and renders a one-line
-  summary on the dashboard.
-
-**Tested**
-- Build clean. Stats file format roundtrip not yet exercised on hardware
-  (needs at least one session to complete first).
-
-**Open issues / deferred**
-- Streak days computation deferred (needs tz-aware "same day" check).
-- DNS-based distraction detection still not wired; without it, distractions
-  count stays 0 across all sessions.
-
-## M8 — Onboarding ✅
-
-**Done**
-- First-boot detection via `settings().onboarded()`. If false, state machine
-  transitions to `Onboarding` and Character mood goes to `Listening` instead
-  of the usual Idle.
-- Portal `/api/onboarding`: GET returns current onboarding state and the
-  device name + whether home WiFi is configured; POST accepts partial updates
-  (`name`, `home_ssid`, `home_password`, `complete` flag).
-- `/web/onboarding.html` — three-step wizard (welcome → name → WiFi → done).
-  Vanilla CSS-only multi-step view using `hidden` attribute.
-- Main `app.js` redirects to onboarding.html if not yet onboarded.
-- "Onboarded=true" flag persists in NVS so subsequent boots skip the wizard.
-
-**Tested**
-- Build clean. Onboarding API endpoints registered. Flow not yet exercised
-  end-to-end on hardware (requires phone AP connection in the morning).
-
-**Open issues / deferred**
-- Home WiFi credentials are stored in NVS but **NOT encrypted** — see
-  ADR-005. M9 OTA will rely on this. For production, M12 should consider
-  application-level AES blob encryption of `hwifi_p`.
-- No QR code generation on OLED yet. The cube currently shows its name + IP
-  on the display when in Onboarding state (added via Character logic).
-
-## M9 — OTA Updates ✅
-
-**Done**
-- `dash::Ota` — fetches `api.github.com/repos/JPhusion/dash/releases/latest`,
-  compares the tag against `kFirmwareVersion`, downloads the `firmware.bin`
-  asset, streams it through `Update.h` to the inactive OTA partition while
-  hashing with SHA-256, and reboots on success.
-- STA-mode bring-up tears the AP down (channel conflict) and enables
-  `WIFI_PS_MIN_MODEM` so the OTA path doesn't burn battery during the long
-  download.
-- SemVer parser handles `vX.Y.Z` and bare `X.Y.Z`; refuses to downgrade.
-- Portal `/api/ota/check` triggers a manual update; on `UpToDate` /
-  failure it relights the AP + reregisters portal routes.
-- `tools/release.sh <semver>` rewrites `firmware_version` in
-  `platformio.ini`, runs `pio run -e dash-release`, copies the binary into
-  `release/$VERSION/`, generates `firmware.bin.sha256`, and prints the
-  `gh release create` command.
-
-**Tested**
-- Build clean. The GitHub releases API path is not exercised in the
-  overnight build (no release published yet); the manual `/api/ota/check`
-  endpoint is wired and ready for the morning.
-
-**Open issues / deferred**
-- ECDSA signature verification (mentioned in master prompt) **not**
-  implemented — SHA-256 against a sibling `firmware.bin.sha256` is the only
-  integrity check. To enable ECDSA we'd embed a public key in firmware and
-  fetch a `.sig` file alongside the binary. Documented in ADR-006-ota.
-- TLS cert validation: `WiFiClientSecure::setInsecure()` is used. A future
-  M12 hardening should embed the root CA bundle (Let's Encrypt / DigiCert).
-- Scheduled 4-AM auto-check via deep-sleep timer wake **not** wired into
-  `Power::enterDeepSleep` yet — the API + flow exists, just need to compute
-  the next-4am offset from `settings().lastUnix() + tzOffsetMin()`.
-
-## M10 — Gestures Menu & Games ✅
-
-**Done**
-- `dash::Games` — two minigames behind a single FSM:
-  - **Reaction Time**: 5 rounds, eye state flashes Surprised, player taps as
-    fast as possible (or fails within 3 s). Score = sum of (3000 - reactionMs)
-    per round.
-  - **Bop It**: cube shows TAP! / SHAKE! / UP! / DOWN!, player has a
-    shrinking window to comply (1800 ms → 600 ms). One miss ends the run.
-- Games subscribe to IMU `Tap`, `Shake`, and `OrientationChange` events so
-  the same gesture system that drives sessions drives gameplay.
-- On game start: state machine → InGame, mood → Playful, `game_start.raw`
-  plays. Reaction/Bop It results show on the OLED for 2.5 s, then return to
-  Idle.
-- Portal `/api/game` GET returns current game + last score; POST handles
-  `{action: start|stop, game: reaction|bopit}`.
-- Gesture trigger from Idle: not wired in this milestone. Games are
-  reachable via the portal API; M12 polish should wire "shake while idle
-  for 1.5 s" → "open game menu" to satisfy the bench-only gesture in the
-  spec.
-
-**Tested**
-- Build clean. Game flow not yet exercised on hardware (needs the user to
-  physically tap/shake/flip — staged for the morning).
-
-**Open issues / deferred**
-- No portal game-picker UI yet. The endpoints work but the user needs to
-  call them manually for now.
-- Single-cube only (group games come in M11).
-
-## M11 — ESP-NOW Multi-Dash ✅ (scaffolding)
-
-**Done**
-- `dash::EspNowDash` — minimal multi-cube transport. Broadcasts presence
-  beacons on channel 6, ignores its own broadcasts (deviceId = last 4 MAC
-  bytes), parses incoming `DSH1` magic-prefixed frames in a worker task.
-- Frame protocol: 4-byte magic, type, flags, seq, deviceId, 32-byte payload.
-  Types: Presence / RoomInvite / SessionStart / Heartbeat / SessionEnd.
-- Peer table (up to 8 peers) with last-seen-ms TTL; entries are pruned at
-  10 s of silence.
-- Channel locked at 6 to coexist with the Dash AP. STA-mode operations
-  (M9 OTA) pause ESP-NOW via `stop()` and resume after.
-- Portal `/api/group` GET returns running flag + peer list; POST accepts
-  `start | stop | invite` actions.
-
-**Tested**
-- Build clean. Cannot exercise multi-cube behaviour with only one Dash —
-  scaffolding is committed and ready for the second cube.
-
-**Open issues / deferred**
-- Session-state sync (heartbeat handler) not yet routed into the Session
-  module; the message round-trip is in place but the response is just
-  logged. Adding the "host's timer wins" coordination is a follow-up once
-  a second Dash is available to test against.
-- Encryption + LMK pairing not enabled — relies on the broadcast-only,
-  in-arm's-reach trust model.
-
-## M12 — Polish, Documentation, Final Pass ⏳
-
-(In progress.)
+See `MORNING.md` at the repo root for a friendly walkthrough.
