@@ -106,6 +106,10 @@ void Session::stop(bool celebrate) {
   character().setMood(Mood::Neutral);
   stateMachine().transitionTo(DeviceState::Idle);
   idleManager().inhibitSleep(false);
+  // Reset the idle clock so dash doesn't immediately go drowsy if the user
+  // happened to be still during the session — they just earned a moment of
+  // celebration, not the sleepy face.
+  idleManager().poke();
   if (celebrate) {
     // Milestone celebrations: total session count crosses round numbers gets
     // an extra-long heart-eye finale. The completed bit is what we just wrote
