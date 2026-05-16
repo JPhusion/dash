@@ -9,6 +9,7 @@
 #include "dash/imu.h"
 #include "dash/log.h"
 #include "dash/power.h"
+#include "dash/ota.h"
 #include "dash/session.h"
 #include "dash/settings.h"
 #include "dash/state_machine.h"
@@ -242,6 +243,22 @@ void Portal::begin() {
     n += stats().recentSessionsJson(buf + n, sizeof(buf) - n - 2, 10);
     snprintf(buf + n, sizeof(buf) - n, "}");
     sv->send(200, "application/json", buf);
+  });
+
+  // --- /api/ota/check ---
+  sv->on("/api/ota/check", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    log::info(kTag, "manual OTA check");
+    sv->send(202, "application/json", "{\"started\":true}");
+    // Run synchronously after the response (server task is on core 0).
+    // checkAndApply() will reboot on success; otherwise we just log.
+    OtaResult r = ota().checkAndApply();
+    log::info(kTag, "OTA result: %s", otaResultString(r));
+    // Bring the AP back up if STA mode left it down.
+    if (!wifiAp().running()) {
+      wifiAp().start();
+      portal().begin();
+    }
   });
 
   // --- Static file fallback / root ---

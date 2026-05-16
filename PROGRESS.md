@@ -288,6 +288,40 @@
 - No QR code generation on OLED yet. The cube currently shows its name + IP
   on the display when in Onboarding state (added via Character logic).
 
-## M9..M12
+## M9 — OTA Updates ✅
+
+**Done**
+- `dash::Ota` — fetches `api.github.com/repos/JPhusion/dash/releases/latest`,
+  compares the tag against `kFirmwareVersion`, downloads the `firmware.bin`
+  asset, streams it through `Update.h` to the inactive OTA partition while
+  hashing with SHA-256, and reboots on success.
+- STA-mode bring-up tears the AP down (channel conflict) and enables
+  `WIFI_PS_MIN_MODEM` so the OTA path doesn't burn battery during the long
+  download.
+- SemVer parser handles `vX.Y.Z` and bare `X.Y.Z`; refuses to downgrade.
+- Portal `/api/ota/check` triggers a manual update; on `UpToDate` /
+  failure it relights the AP + reregisters portal routes.
+- `tools/release.sh <semver>` rewrites `firmware_version` in
+  `platformio.ini`, runs `pio run -e dash-release`, copies the binary into
+  `release/$VERSION/`, generates `firmware.bin.sha256`, and prints the
+  `gh release create` command.
+
+**Tested**
+- Build clean. The GitHub releases API path is not exercised in the
+  overnight build (no release published yet); the manual `/api/ota/check`
+  endpoint is wired and ready for the morning.
+
+**Open issues / deferred**
+- ECDSA signature verification (mentioned in master prompt) **not**
+  implemented — SHA-256 against a sibling `firmware.bin.sha256` is the only
+  integrity check. To enable ECDSA we'd embed a public key in firmware and
+  fetch a `.sig` file alongside the binary. Documented in ADR-006-ota.
+- TLS cert validation: `WiFiClientSecure::setInsecure()` is used. A future
+  M12 hardening should embed the root CA bundle (Let's Encrypt / DigiCert).
+- Scheduled 4-AM auto-check via deep-sleep timer wake **not** wired into
+  `Power::enterDeepSleep` yet — the API + flow exists, just need to compute
+  the next-4am offset from `settings().lastUnix() + tzOffsetMin()`.
+
+## M10..M12
 
 (Pending.)
