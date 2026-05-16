@@ -74,6 +74,14 @@ button.primary {
   border-color: var(--accent);
 }
 button.primary:active { background: var(--accent-press); }
+button.ghost {
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid #2a3142;
+  margin-top: 8px;
+  font-weight: 500;
+}
+button.ghost:active { color: var(--fg); }
 button:disabled { opacity: 0.4; }
 
 label {

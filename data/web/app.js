@@ -148,10 +148,23 @@ async function saveConfig() {
   } catch (e) { setPill("err", "save failed"); }
 }
 
+async function replayOnboarding() {
+  if (!confirm("Replay the welcome tutorial?")) return;
+  try {
+    await api("/api/onboarding", {
+      method: "POST",
+      body: JSON.stringify({ reset: true }),
+    });
+    location.href = "/onboarding.html";
+  } catch (e) { alert("could not reset: " + e.message); }
+}
+
 function bind() {
   $("btn-start-session").addEventListener("click", startSession);
   $("btn-end-session").addEventListener("click", endSession);
   $("btn-save-config").addEventListener("click", saveConfig);
+  const replay = $("btn-replay-onboarding");
+  if (replay) replay.addEventListener("click", replayOnboarding);
 }
 
 async function boot() {

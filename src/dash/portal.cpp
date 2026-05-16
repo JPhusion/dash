@@ -227,6 +227,13 @@ void Portal::begin() {
       stateMachine().transitionTo(DeviceState::Idle);
       log::info(kTag, "onboarding complete");
     }
+    if (doc["reset"].is<bool>() && doc["reset"].as<bool>()) {
+      // Replay the tutorial from settings — clears the onboarded flag so the
+      // app.js redirect sends the user back to /onboarding.html.
+      settings().setOnboarded(false);
+      stateMachine().transitionTo(DeviceState::Onboarding);
+      log::info(kTag, "onboarding reset by user");
+    }
     sv->send(200, "application/json", "{\"ok\":true}");
   });
 
