@@ -173,13 +173,19 @@ function renderSession() {
   $("session-running").hidden = false;
   const elapsed = s.elapsed_s | 0;
   const total = s.total_s | 0;
+  const label = (s.label || "").trim();
+  $("running-label").textContent = label || "In session";
   $("timer").textContent = formatTimer(elapsed);
   $("timer-sub").textContent =
     `of ${formatTimer(total)} · ${s.distractions} distraction${s.distractions === 1 ? "" : "s"}`;
   const pct = total > 0 ? Math.min(100, (elapsed / total) * 100) : 0;
   $("progress-fill").style.width = `${pct}%`;
-  $("running-mood").textContent =
-    s.distractions === 0 ? "in the zone" : "stay with it";
+  const paused = s.state === 2;
+  $("running-mood").textContent = paused
+    ? "paused"
+    : (s.distractions === 0 ? "in the zone" : "stay with it");
+  const pauseBtn = $("btn-pause-session");
+  if (pauseBtn) pauseBtn.textContent = paused ? "Resume" : "Pause";
 }
 
 function formatTimer(s) {
@@ -214,7 +220,7 @@ function renderStats() {
   const hist = $("history-list");
   hist.innerHTML = "";
   if (!s.recent || s.recent.length === 0) {
-    hist.innerHTML = '<div class="subtle">no sessions yet — go start one</div>';
+    hist.innerHTML = '<div class="subtle">No sessions yet — head to the Study tab and start one. 🌱</div>';
     return;
   }
   for (const r of s.recent.slice().reverse()) {
@@ -342,6 +348,19 @@ async function endSession() {
   } catch (e) { toast("end failed", "err"); }
 }
 
+async function pauseOrResumeSession() {
+  if (!state.session) return;
+  const isPaused = state.session.state === 2; // SessionState::Paused
+  try {
+    await api("/api/session", {
+      method: "POST",
+      body: JSON.stringify({ action: isPaused ? "resume" : "pause" }),
+    });
+    toast(isPaused ? "resumed" : "paused");
+    await refreshSession();
+  } catch (e) { toast("pause failed", "err"); }
+}
+
 async function saveConfig() {
   const body = {
     name: $("cfg-name").value || "Dash",
@@ -426,6 +445,8 @@ function switchTab(tab) {
 function bind() {
   $("btn-start-session").addEventListener("click", startSession);
   $("btn-end-session").addEventListener("click", endSession);
+  const pauseBtn = $("btn-pause-session");
+  if (pauseBtn) pauseBtn.addEventListener("click", pauseOrResumeSession);
   $("btn-save-config").addEventListener("click", saveConfig);
   $("btn-replay-onboarding").addEventListener("click", replayOnboarding);
   $("btn-ota-check").addEventListener("click", otaCheck);

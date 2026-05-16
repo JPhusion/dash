@@ -152,19 +152,29 @@ void Portal::begin() {
   sv->on("/api/session", HTTP_GET, [this, sv]() {
     lastClientMs_ = millis();
     auto snap = session().snapshot();
-    char buf[256];
+    char buf[320];
     uint32_t elapsed_s = 0;
     if (snap.active) {
       uint32_t elapsedMs = (millis() - snap.startedAtMs) - snap.pausedMs;
       elapsed_s = elapsedMs / 1000UL;
     }
+    // Escape user-supplied label minimally (replace " with ' for json).
+    char safeLabel[40];
+    size_t k = 0;
+    for (size_t i = 0; snap.label[i] && k < sizeof(safeLabel) - 1; i++) {
+      char c = snap.label[i];
+      if (c == '"' || c == '\\' || c == '\n' || c == '\r') c = ' ';
+      safeLabel[k++] = c;
+    }
+    safeLabel[k] = '\0';
     snprintf(buf, sizeof(buf),
              "{\"active\":%s,\"state\":%d,\"elapsed_s\":%u,"
-             "\"total_s\":%u,\"distractions\":%u}",
+             "\"total_s\":%u,\"distractions\":%u,\"label\":\"%s\"}",
              snap.active ? "true" : "false", (int)snap.state,
              (unsigned)elapsed_s,
              (unsigned)snap.targetMin * 60u,
-             (unsigned)snap.distractions);
+             (unsigned)snap.distractions,
+             safeLabel);
     sv->send(200, "application/json", buf);
   });
 
@@ -179,7 +189,8 @@ void Portal::begin() {
       uint16_t minutes = doc["minutes"].is<unsigned>()
                            ? (uint16_t)doc["minutes"].as<unsigned>()
                            : settings().sessionLengthMin();
-      bool ok = session().start(minutes);
+      const char* label = doc["label"].is<const char*>() ? doc["label"].as<const char*>() : nullptr;
+      bool ok = session().start(minutes, label);
       sv->send(ok ? 200 : 409, "application/json",
                ok ? "{\"ok\":true}" : "{\"error\":\"already running\"}");
     } else if (action == "pause") {

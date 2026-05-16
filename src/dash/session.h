@@ -33,6 +33,7 @@ struct SessionSnapshot {
   uint32_t pausedMs;        // total time spent paused, ms
   uint16_t targetMin;       // session length goal in minutes
   uint16_t distractions;
+  char label[40];           // optional human-readable label, null-terminated
 };
 
 extern RTC_DATA_ATTR uint32_t rtcSessionTargetMin;
@@ -45,9 +46,10 @@ class Session {
 
   void begin();
 
-  // Start a session of N minutes. If a session is already running, this is a
-  // no-op (the portal returns 409 — caller handles).
-  bool start(uint16_t minutes);
+  // Start a session of N minutes. Optional label is a user-supplied "what are
+  // you working on" string. If a session is already running, this is a no-op
+  // (the portal returns 409 — caller handles).
+  bool start(uint16_t minutes, const char* label = nullptr);
 
   // Cooperative pause / resume.
   void pause();
@@ -82,6 +84,7 @@ class Session {
   uint32_t accumulatedPauseMs_;
   uint16_t targetMin_;
   uint16_t distractions_;
+  char label_[40];
 
   TaskHandle_t task_;
   static void taskTrampoline(void* arg);

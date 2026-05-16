@@ -26,7 +26,7 @@ Session::Session()
     : state_(SessionState::Idle),
       startedAtMs_(0), pausedAtMs_(0), accumulatedPauseMs_(0),
       targetMin_(0), distractions_(0),
-      task_(nullptr) {}
+      task_(nullptr) { label_[0] = '\0'; }
 
 void Session::begin() {
   // Spin up a tick task pinned to core 0 (next to WiFi).
@@ -34,7 +34,7 @@ void Session::begin() {
                           1, &task_, 0);
 }
 
-bool Session::start(uint16_t minutes) {
+bool Session::start(uint16_t minutes, const char* label) {
   if (state_ == SessionState::Running || state_ == SessionState::Paused) {
     log::warn(kTag, "start rejected: already %d", (int)state_);
     return false;
@@ -46,6 +46,12 @@ bool Session::start(uint16_t minutes) {
   accumulatedPauseMs_ = 0;
   pausedAtMs_ = 0;
   distractions_ = 0;
+  if (label && label[0]) {
+    strncpy(label_, label, sizeof(label_) - 1);
+    label_[sizeof(label_) - 1] = '\0';
+  } else {
+    label_[0] = '\0';
+  }
   enterState(SessionState::Running);
 
   rtcSessionTargetMin = minutes;
@@ -129,6 +135,7 @@ SessionSnapshot Session::snapshot() const {
                (state_ == SessionState::Paused ? (millis() - pausedAtMs_) : 0);
   s.targetMin = targetMin_;
   s.distractions = distractions_;
+  memcpy(s.label, label_, sizeof(s.label));
   return s;
 }
 

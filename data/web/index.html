@@ -57,9 +57,12 @@
       <div class="timer" id="timer">00:00</div>
       <div class="timer-sub" id="timer-sub">of 25:00 · 0 distractions</div>
       <div class="progress"><div class="fill" id="progress-fill"></div></div>
-      <div class="row">
-        <span class="mood"><span class="dot text-accent"></span><span id="running-mood">focused</span></span>
-        <button class="btn ghost" id="btn-end-session" style="height: 36px; width: auto;">End early</button>
+      <div class="row" style="margin-top: var(--s-3)">
+        <span class="mood"><span class="dot"></span><span id="running-mood">focused</span></span>
+      </div>
+      <div class="btn-row" style="margin-top: var(--s-2)">
+        <button class="btn ghost" id="btn-pause-session">Pause</button>
+        <button class="btn danger" id="btn-end-session">End early</button>
       </div>
     </article>
 
