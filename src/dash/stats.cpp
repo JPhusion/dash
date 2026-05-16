@@ -1,6 +1,7 @@
 #include "dash/stats.h"
 
 #include <LittleFS.h>
+#include <time.h>
 
 #include "dash/log.h"
 
@@ -68,14 +69,16 @@ StatsSummary Stats::summary() {
   File f = LittleFS.open(kPath, "r");
   if (!f) return s;
 
-  // Parse simple JSON-lines without a full JSON lib; pull numeric values by
-  // scanning for "as":N and similar.
+  // Build a sorted-by-unix list of session days for streak math (small enough
+  // to fit in stack — we keep at most 64 distinct days from the rolling log).
+  uint32_t distinctDays[64];
+  uint8_t distinctDayCount = 0;
+
   String line;
   line.reserve(160);
   while (f.available()) {
     char c = f.read();
     if (c == '\n') {
-      // tiny scan
       int idx;
       uint32_t startedUnix = 0;
       uint16_t targetMin = 0, actualSec = 0, distractions = 0;
@@ -96,9 +99,17 @@ StatsSummary Stats::summary() {
       s.totalFocusedSec += actualSec;
       s.totalDistractions += distractions;
       if (actualSec > s.bestSingleSec) s.bestSingleSec = actualSec;
-      // Streak math is approximate without timezone info; approximated by
-      // counting consecutive 24h-apart records.
-      (void)startedUnix;
+
+      // Day bucketing for streak — use UTC days; we don't have tz info here
+      // and a 1-day-window error on streak is acceptable.
+      if (startedUnix > 0 && distinctDayCount < 64) {
+        uint32_t dayBucket = startedUnix / 86400UL;
+        bool seen = false;
+        for (uint8_t i = 0; i < distinctDayCount; i++) {
+          if (distinctDays[i] == dayBucket) { seen = true; break; }
+        }
+        if (!seen) distinctDays[distinctDayCount++] = dayBucket;
+      }
       (void)targetMin;
       line = "";
     } else if (line.length() < 200) {
@@ -106,6 +117,37 @@ StatsSummary Stats::summary() {
     }
   }
   f.close();
+
+  // Streak: count consecutive day buckets ending today (or yesterday — gives
+  // the user a one-day grace so an active streak doesn't break the moment
+  // the clock rolls past midnight).
+  if (distinctDayCount > 0) {
+    // Sort distinctDays ascending (small N, bubble sort is fine).
+    for (uint8_t i = 0; i < distinctDayCount; i++) {
+      for (uint8_t j = i + 1; j < distinctDayCount; j++) {
+        if (distinctDays[j] < distinctDays[i]) {
+          uint32_t t = distinctDays[i]; distinctDays[i] = distinctDays[j]; distinctDays[j] = t;
+        }
+      }
+    }
+    uint32_t today = (uint32_t)time(nullptr) / 86400UL;
+    // Walk backwards from today.
+    uint16_t streak = 0;
+    int32_t expected = (int32_t)today;
+    for (int i = distinctDayCount - 1; i >= 0 && expected >= 0; i--) {
+      if ((int32_t)distinctDays[i] == expected) {
+        streak++;
+        expected--;
+      } else if ((int32_t)distinctDays[i] == expected - 1 && streak == 0) {
+        // Grace: today missing but yesterday present still counts as 1.
+        streak++;
+        expected -= 2;
+      } else if ((int32_t)distinctDays[i] < expected) {
+        break;
+      }
+    }
+    s.streakDays = streak;
+  }
   return s;
 }
 

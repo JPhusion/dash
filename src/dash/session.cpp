@@ -9,6 +9,7 @@
 #include "dash/sounds.h"
 #include "dash/state_machine.h"
 #include "dash/stats.h"
+#include <esp_random.h>
 
 namespace dash {
 
@@ -56,6 +57,9 @@ bool Session::start(uint16_t minutes) {
   stateMachine().transitionTo(DeviceState::InSession);
   idleManager().inhibitSleep(true);
   display().setEyeState(EyeState::Focused);
+  // Time-aware microexpression overrides the focused face for a moment so
+  // the user feels acknowledged before settling in.
+  character().greetBasedOnTime();
   audio().play(sounds::kSessionStart);
   return true;
 }
@@ -84,7 +88,7 @@ void Session::stop(bool celebrate) {
   // Record stats before tearing down state.
   uint32_t elapsedMs = (millis() - startedAtMs_) - accumulatedPauseMs_;
   SessionRecord r{};
-  r.startedUnix    = settings().lastUnix();   // best-effort wall clock
+  r.startedUnix    = settings().lastUnix();
   r.targetMin      = targetMin_;
   r.actualSec      = (uint16_t)(elapsedMs / 1000UL);
   r.distractions   = distractions_;
@@ -97,8 +101,19 @@ void Session::stop(bool celebrate) {
   stateMachine().transitionTo(DeviceState::Idle);
   idleManager().inhibitSleep(false);
   if (celebrate) {
-    character().react(EyeState::Celebrating, 3000);
-    audio().play(sounds::kSessionComplete);
+    // Milestone celebrations: total session count crosses round numbers gets
+    // an extra-long heart-eye finale. The completed bit is what we just wrote
+    // so this fires inside the same stop() call.
+    auto summary = stats().summary();
+    uint16_t n = summary.completedSessions;
+    if (n == 1 || n == 10 || n == 25 || n == 50 || n == 100 || (n > 100 && n % 100 == 0)) {
+      log::info(kTag, "milestone %u completed sessions!", n);
+      character().react(EyeState::Heart, 4000);
+      audio().play(sounds::kMilestone);
+    } else {
+      character().react(EyeState::Celebrating, 3000);
+      audio().play(sounds::kSessionComplete);
+    }
   } else {
     character().react(EyeState::Disappointed, 1500);
     audio().play(sounds::kSessionEnd);

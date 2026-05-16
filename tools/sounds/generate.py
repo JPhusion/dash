@@ -145,6 +145,35 @@ def tap_ack() -> np.ndarray:
     return envelope(sine(1200, 0.04, amp=0.4), 0.002, 0.02)
 
 
+def tap_ack_2() -> np.ndarray:
+    """Slightly higher click — variant 2."""
+    return envelope(sine(1450, 0.04, amp=0.4), 0.002, 0.02)
+
+
+def tap_ack_3() -> np.ndarray:
+    """Slightly lower click — variant 3."""
+    return envelope(sine(980, 0.04, amp=0.4), 0.002, 0.02)
+
+
+def good_morning() -> np.ndarray:
+    """Two-note 'hello' for first-session-of-the-day."""
+    return concat(
+        envelope(triangle(523, 0.10), 0.005, 0.03),
+        envelope(triangle(784, 0.18), 0.005, 0.08),
+    )
+
+
+def milestone() -> np.ndarray:
+    """Extra-long fanfare for round-number session milestones."""
+    return concat(
+        envelope(triangle(523, 0.10), 0.005, 0.02),
+        envelope(triangle(659, 0.10), 0.005, 0.02),
+        envelope(triangle(784, 0.10), 0.005, 0.02),
+        envelope(triangle(1047, 0.10), 0.005, 0.02),
+        envelope(triangle(1318, 0.40), 0.005, 0.15),
+    )
+
+
 def menu_blip() -> np.ndarray:
     return envelope(square(800, 0.04, amp=0.25), 0.001, 0.02)
 
@@ -237,6 +266,10 @@ SOUNDS: Dict[str, Callable[[], np.ndarray]] = {
     "session_end": session_end,
     "session_complete": session_complete,
     "tap_ack": tap_ack,
+    "tap_ack_2": tap_ack_2,
+    "tap_ack_3": tap_ack_3,
+    "good_morning": good_morning,
+    "milestone": milestone,
     "menu_blip": menu_blip,
     "menu_confirm": menu_confirm,
     "menu_back": menu_back,

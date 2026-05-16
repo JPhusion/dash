@@ -39,7 +39,7 @@ void onImuEvent(const dash::ImuEvent& e) {
     case ImuEventType::Tap:
       dash::log::info("Main", "tap (mag=%.2fg)", e.magnitude);
       dash::display().blink();
-      dash::sounds::play(dash::sounds::kTapAck);
+      dash::sounds::playTapAck();
       break;
     case ImuEventType::DoubleTap:
       dash::log::info("Main", "double-tap");

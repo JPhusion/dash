@@ -280,10 +280,10 @@ void Portal::begin() {
     int n = snprintf(buf, sizeof(buf),
         "{\"total_sessions\":%u,\"completed_sessions\":%u,"
         "\"total_focused_sec\":%u,\"total_distractions\":%u,"
-        "\"best_single_sec\":%u,\"recent\":",
+        "\"best_single_sec\":%u,\"streak_days\":%u,\"recent\":",
         s.totalSessions, s.completedSessions,
         (unsigned)s.totalFocusedSec, s.totalDistractions,
-        (unsigned)s.bestSingleSec);
+        (unsigned)s.bestSingleSec, s.streakDays);
     n += stats().recentSessionsJson(buf + n, sizeof(buf) - n - 2, 10);
     snprintf(buf + n, sizeof(buf) - n, "}");
     sv->send(200, "application/json", buf);

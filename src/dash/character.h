@@ -39,6 +39,11 @@ class Character {
   // Animated boot sequence: splash, blink, look around, settle.
   void playBootAnimation();
 
+  // Time-aware greeting (good morning / hello / good evening) — call after a
+  // session starts or after a deep-sleep wake. Falls through cleanly if the
+  // wall clock hasn't been synced yet.
+  void greetBasedOnTime();
+
   // Fire a brief reaction (overrides resting state for hold_ms then returns).
   void react(EyeState state, uint32_t hold_ms = 1200);
 
