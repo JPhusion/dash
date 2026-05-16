@@ -1,5 +1,6 @@
 #include "dash/wifi_ap.h"
 
+#include <ESPmDNS.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
 
@@ -61,6 +62,17 @@ bool WifiAp::start() {
   // serving 404s while Portal wires up.
   server_->begin();
 
+  // mDNS responder so users can type http://dash.local in their browser
+  // instead of remembering 192.168.4.1. Works automatically on iOS/macOS
+  // (Bonjour) and most Android browsers (Chrome adds .local resolution).
+  // Advertises an http service so phones can also discover via Bonjour.
+  if (MDNS.begin("dash")) {
+    MDNS.addService("http", "tcp", 80);
+    log::info(kTag, "mDNS up: http://dash.local/");
+  } else {
+    log::warn(kTag, "mDNS start failed");
+  }
+
   running_ = true;
   xTaskCreatePinnedToCore(&WifiAp::dnsTaskTrampoline, "dns", 4096, this, 1,
                           &dnsTask_, 0);
@@ -75,6 +87,7 @@ bool WifiAp::start() {
 void WifiAp::stop() {
   if (!running_) return;
   running_ = false;
+  MDNS.end();
   dns_.stop();
   if (server_) {
     server_->close();

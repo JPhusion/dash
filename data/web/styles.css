@@ -75,6 +75,10 @@ html[data-theme="dusk"] {
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+/* The HTML hidden attribute sets `display: none` implicitly, but any explicit
+ * `display` rule (e.g. `.card { display: flex }`) overrides it. !important
+ * here makes hidden work reliably across our card/step/section markup. */
+[hidden] { display: none !important; }
 
 html { background: var(--bg); }
 body {

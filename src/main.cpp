@@ -30,6 +30,7 @@
 
 static uint32_t g_lastHeartbeatMs = 0;
 static uint32_t g_faceDownSinceMs = 0;
+static uint8_t  g_lastStationCount = 0;
 
 namespace {
 
@@ -189,7 +190,9 @@ void setup() {
   }
 
   // First-time users haven't seen the portal yet — show the SSID on the
-  // OLED so they know which network to join.
+  // OLED so they know which network to join. Stays on screen until they
+  // connect their phone (the loop swaps it to a "open dash.local" hint
+  // once a station associates).
   if (!dash::settings().onboarded()) {
     dash::display().showText("Connect to:", dash::wifiAp().ssid().c_str());
   }
@@ -207,6 +210,21 @@ void loop() {
     dash::display().setEyeState(dash::EyeState::Sleepy);
     delay(500);
     dash::power().enterDeepSleep(0);
+  }
+
+  // Show a URL hint on the OLED the moment a phone associates with the AP
+  // (transition from 0 → 1+ stations). Clears the hint when they disconnect.
+  const uint8_t stationCount = dash::wifiAp().stationCount();
+  if (stationCount != g_lastStationCount) {
+    if (g_lastStationCount == 0 && stationCount > 0) {
+      dash::log::info("Main", "phone connected — showing portal hint");
+      dash::display().showText("Open in browser", "dash.local");
+      dash::character().react(dash::EyeState::Happy, 1500);
+    } else if (stationCount == 0) {
+      dash::log::info("Main", "phone disconnected");
+      dash::display().clearOverlay();
+    }
+    g_lastStationCount = stationCount;
   }
 
   if (now - g_lastHeartbeatMs >= 10000) {
