@@ -39,6 +39,18 @@ void Character::playBootAnimation() {
   log::info(kTag, "boot animation done");
 }
 
+void Character::playWakeAnimation() {
+  // Wake-from-sleep is short: closed-eyes → blink twice → settle.
+  display().setEyeState(EyeState::Asleep);
+  delay(200);
+  display().setEyeState(EyeState::Sleepy);
+  delay(250);
+  display().blink();
+  delay(150);
+  display().setEyeState(restingEyeState());
+  log::info(kTag, "wake animation done");
+}
+
 void Character::react(EyeState state, uint32_t hold_ms) {
   display().setEyeState(state);
   reactUntilMs_ = millis() + hold_ms;

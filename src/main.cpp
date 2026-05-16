@@ -176,9 +176,17 @@ void setup() {
     dash::portal().begin();
   }
 
-  // Boot chime + animation (chime silent under DASH_SILENT_AUDIO).
-  dash::sounds::play(dash::sounds::kBoot);
-  dash::character().playBootAnimation();
+  // Boot vs wake animation. If we came from deep sleep, skip the splash and
+  // run a shorter wake sequence; otherwise the full Dash boot.
+  if (dash::power().lastWakeCause() == ESP_SLEEP_WAKEUP_TOUCHPAD ||
+      dash::power().lastWakeCause() == ESP_SLEEP_WAKEUP_EXT0 ||
+      dash::power().lastWakeCause() == ESP_SLEEP_WAKEUP_TIMER) {
+    dash::sounds::play(dash::sounds::kWake);
+    dash::character().playWakeAnimation();
+  } else {
+    dash::sounds::play(dash::sounds::kBoot);
+    dash::character().playBootAnimation();
+  }
 
   dash::log::info("Main", "setup complete");
 }

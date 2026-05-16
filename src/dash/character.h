@@ -39,6 +39,10 @@ class Character {
   // Animated boot sequence: splash, blink, look around, settle.
   void playBootAnimation();
 
+  // Faster, quieter wake animation for deep-sleep wake-up. Doesn't show the
+  // splash; just blinks awake and settles.
+  void playWakeAnimation();
+
   // Time-aware greeting (good morning / hello / good evening) — call after a
   // session starts or after a deep-sleep wake. Falls through cleanly if the
   // wall clock hasn't been synced yet.
