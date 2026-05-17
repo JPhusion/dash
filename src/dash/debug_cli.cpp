@@ -170,7 +170,11 @@ void DebugCli::begin() { /* nothing to init */ }
 void DebugCli::start() {
   if (running_) return;
   running_ = true;
-  xTaskCreatePinnedToCore(&DebugCli::taskTrampoline, "debug-cli", 6144, this,
+  // 16 KB stack — OTA path through `ota` CLI command pulls in mbedtls
+  // TLS handshake (~6 KB), HTTPClient + WiFiClientSecure, and Update.write
+  // buffers. 6 KB was tripping the canary mid-TLS. Calibration walkthroughs
+  // and self-test also benefit from headroom.
+  xTaskCreatePinnedToCore(&DebugCli::taskTrampoline, "debug-cli", 16384, this,
                           1, &task_, 0);
 }
 
