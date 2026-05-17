@@ -142,14 +142,15 @@ void Portal::begin() {
   // --- /api/config GET/POST ---
   sv->on("/api/config", HTTP_GET, [this, sv]() {
     lastClientMs_ = millis();
-    char buf[256];
+    char buf[320];
     snprintf(buf, sizeof(buf),
              "{\"name\":\"%s\",\"volume\":%u,\"sleep_timeout_s\":%u,"
-             "\"session_minutes\":%u,\"onboarded\":%s}",
+             "\"session_minutes\":%u,\"tap_g\":%.2f,\"onboarded\":%s}",
              settings().deviceName().c_str(),
              settings().audioVolume(),
              settings().sleepTimeoutSec(),
              settings().sessionLengthMin(),
+             settings().tapSensitivityG(),
              settings().onboarded() ? "true" : "false");
     sv->send(200, "application/json", buf);
   });
@@ -171,6 +172,12 @@ void Portal::begin() {
     }
     if (doc["session_minutes"].is<unsigned>()) {
       settings().setSessionLengthMin((uint16_t)(doc["session_minutes"].as<unsigned>()));
+    }
+    if (doc["tap_g"].is<float>() || doc["tap_g"].is<double>()) {
+      float g = doc["tap_g"].as<float>();
+      settings().setTapSensitivityG(g);
+      imu().setTapThreshold(settings().tapSensitivityG());
+      log::info(kTag, "tap sensitivity -> %.2fg", settings().tapSensitivityG());
     }
     // Home Wi-Fi credentials piped through here too so the settings card can
     // edit them after onboarding. Empty string is treated as "no change" so

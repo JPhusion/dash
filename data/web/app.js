@@ -129,6 +129,7 @@ async function refreshConfig() {
     $("vol-label").textContent = c.volume ?? 60;
     $("cfg-sleep-min").value = Math.round((c.sleep_timeout_s || 180) / 60);
     $("cfg-session-min").value = c.session_minutes || 25;
+    if ($("cfg-tap-g")) $("cfg-tap-g").value = (c.tap_g ?? 0.5).toFixed(1);
     // Sync the selected chip default.
     selectMinutes(c.session_minutes || 25);
   } catch (e) {}
@@ -373,6 +374,7 @@ async function saveConfig() {
     volume: Number($("cfg-volume").value),
     sleep_timeout_s: Number($("cfg-sleep-min").value || 3) * 60,
     session_minutes: Number($("cfg-session-min").value || 25),
+    tap_g: Number($("cfg-tap-g")?.value || 0.5),
     home_ssid: $("cfg-home-ssid").value || undefined,
     home_password: $("cfg-home-pw").value || undefined,
   };

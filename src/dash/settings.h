@@ -34,6 +34,11 @@ class Settings {
   uint16_t sessionLengthMin();
   void setSessionLengthMin(uint16_t m);
 
+  // Tap sensitivity threshold in g of linear accel. Default 0.5 — lower =
+  // more sensitive. Range clamped to 0.2..2.0.
+  float tapSensitivityG();
+  void setTapSensitivityG(float g);
+
   // Home Wi-Fi credentials for OTA. Empty string = unset.
   String homeWifiSsid();
   void setHomeWifiSsid(const String& s);

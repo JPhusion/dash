@@ -29,7 +29,7 @@ constexpr uint32_t kFaceHoldMs = 250;                      // hysteresis on face
 constexpr float kStationaryGyroThresh = 1.5f;             // deg/s
 constexpr float kStationaryAccelThresh = 0.05f;           // g (linear accel)
 constexpr uint32_t kStationaryHoldMs = 5000;
-constexpr uint32_t kTapRefractoryMs = 80;
+constexpr uint32_t kTapRefractoryMs = 120;
 constexpr uint32_t kShakeRefractoryMs = 1500;
 
 Imu* g_singleton = nullptr;
@@ -68,6 +68,10 @@ Imu::Imu()
       stationaryFired_(false),
       listenerCount_(0) {
   for (auto& v : varianceWindow_) v = 0.0f;
+  // Tap threshold defaults to 0.5g of *linear* accel (gravity-subtracted).
+  // 1.5g (the original) required a firm bang; 0.5g registers a normal
+  // finger tap on a ~50g cube. setTapThreshold() can re-tune at runtime.
+  tapThreshold_ = 0.5f;
 }
 
 bool Imu::readMpu(uint8_t reg, uint8_t* buf, uint8_t len) {

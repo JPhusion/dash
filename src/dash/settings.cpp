@@ -69,6 +69,20 @@ void Settings::setSessionLengthMin(uint16_t m) {
   p_.begin(kNs, false); p_.putUShort("sess_min", m); p_.end();
 }
 
+float Settings::tapSensitivityG() {
+  p_.begin(kNs, true);
+  float v = p_.getFloat("tap_g", 0.5f);
+  p_.end();
+  if (v < 0.2f) v = 0.2f;
+  if (v > 2.0f) v = 2.0f;
+  return v;
+}
+void Settings::setTapSensitivityG(float g) {
+  if (g < 0.2f) g = 0.2f;
+  if (g > 2.0f) g = 2.0f;
+  p_.begin(kNs, false); p_.putFloat("tap_g", g); p_.end();
+}
+
 String Settings::homeWifiSsid() {
   p_.begin(kNs, true);
   String s = p_.getString("hwifi_s", "");

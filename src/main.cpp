@@ -128,6 +128,7 @@ void setup() {
   }
 
   if (dash::imu().begin()) {
+    dash::imu().setTapThreshold(dash::settings().tapSensitivityG());
     dash::imu().onEvent(onImuEvent);
     dash::imu().start();
   }

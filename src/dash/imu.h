@@ -74,6 +74,7 @@ class Imu {
 
   // Tuning knobs. Defaults are reasonable for a small cube; tweak per device.
   void setTapThreshold(float g)        { tapThreshold_ = g; }
+  float tapThreshold() const           { return tapThreshold_; }
   void setShakeThresholdVariance(float v) { shakeVariance_ = v; }
   void setDoubleTapWindowMs(uint32_t ms)  { doubleTapWindowMs_ = ms; }
   void setTripleTapWindowMs(uint32_t ms)  { tripleTapWindowMs_ = ms; }
