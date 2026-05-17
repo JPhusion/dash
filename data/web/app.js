@@ -459,6 +459,31 @@ async function factoryReset() {
   } catch (e) { toast("reset failed", "err"); }
 }
 
+async function startGame(which) {
+  try {
+    await api("/api/game", {
+      method: "POST",
+      body: JSON.stringify({ action: "start", game: which }),
+    });
+    toast(`${which} starting — watch the cube`);
+  } catch (e) { toast("could not start game", "err"); }
+}
+
+async function refreshGames() {
+  try {
+    const g = await api("/api/game");
+    const el = $("games-status");
+    if (!el) return;
+    if (g.current === 0) {
+      el.textContent = g.last_score
+        ? `last score: ${g.last_score}`
+        : "ready when you are";
+    } else {
+      el.textContent = g.current === 1 ? "playing: Reaction Time" : "playing: Bop It";
+    }
+  } catch (e) {}
+}
+
 async function startGroupStudy() {
   try {
     await api("/api/group", { method: "POST", body: JSON.stringify({ action: "start" }) });
@@ -493,6 +518,11 @@ function bind() {
   $("btn-reset-stats").addEventListener("click", resetStats);
   $("btn-factory-reset").addEventListener("click", factoryReset);
   $("btn-group-study").addEventListener("click", startGroupStudy);
+
+  // Game launch buttons (Study tab → Quick games card).
+  $$("#games-card .btn[data-game]").forEach(b => {
+    b.addEventListener("click", () => startGame(b.dataset.game));
+  });
 
   // Volume slider: live label + debounced API call so user hears a test
   // tick at the new level. Throttled to one /api/config write per second to
@@ -618,6 +648,7 @@ async function boot() {
   setInterval(refreshStatus, 4000);
   setInterval(refreshSession, 1000);
   setInterval(refreshStats, 30000);
+  setInterval(refreshGames, 2000);
 }
 
 document.addEventListener("DOMContentLoaded", boot);

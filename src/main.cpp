@@ -32,6 +32,7 @@
 static uint32_t g_lastHeartbeatMs = 0;
 static uint32_t g_faceDownSinceMs = 0;
 static uint8_t  g_lastStationCount = 0;
+static uint32_t g_lastLookMs = 0;
 
 namespace {
 

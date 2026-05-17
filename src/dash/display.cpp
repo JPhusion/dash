@@ -173,6 +173,16 @@ void Display::setAutoLook(bool on) {
   if (g_face) g_face->RandomLook = on;
 }
 
+void Display::lookAt(float x, float y) {
+  if (!g_face) return;
+  // While we're driving the gaze explicitly, the autonomous look-around
+  // task would just fight us. Stay disabled until setAutoLook(true).
+  if (g_face->RandomLook) g_face->RandomLook = false;
+  if (x < -1.0f) x = -1.0f; if (x > 1.0f) x = 1.0f;
+  if (y < -1.0f) y = -1.0f; if (y > 1.0f) y = 1.0f;
+  g_face->Look.LookAt(x, y);
+}
+
 void Display::pause(bool on) { paused_ = on; }
 
 void Display::renderTaskTrampoline(void* arg) {

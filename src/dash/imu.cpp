@@ -343,27 +343,47 @@ void Imu::sampleLoop() {
         }
       }
 
-      // ---- Tap detection. A real finger tap has a distinctive signature:
-      // a brief quiet sample IMMEDIATELY before a sharp spike. Sustained
-      // motion (shaking, hand-held, sliding the cube) keeps linMag
-      // continuously elevated, so prevQuiet fails on those.
+      // ---- Tap detection. A real "tap on the head" has two properties
+      // that distinguish it from a side-to-side shake:
       //
-      // The earlier varianceQuiet check turned out to be too aggressive —
-      // after one tap the variance stays elevated long enough to swallow
-      // the second tap of a deliberate double-tap. Replaced with a
-      // smaller inShakeWindow window (the explicit shake detector above
-      // already debounces sustained motion).
+      //   1. Direction: the cap-touch pad lives on a fixed face of the
+      //      cube. A tap on that face pushes the cube along ONE specific
+      //      body axis (Z by IMU mounting convention). Side-to-side
+      //      shaking puts the impulse in the X / Y plane. We measure
+      //      alignment of the linear-accel vector with the Z axis:
+      //      |laz| / |linMag| > 0.55 → along body-Z → tap on top/bottom.
       //
-      // Cap-touch boost: when the user is touching the cap pad, drop the
-      // threshold to 60% so even a soft tap on the pad-side face registers.
+      //   2. Profile: a sharp spike preceded by a quiet sample
+      //      (prevQuiet) rules out continuous motion. The FIRST tap of
+      //      a chain enforces this strictly; follow-up taps within the
+      //      triple-tap window get a relaxed rule so a hard first-tap's
+      //      ring-down doesn't gate the second hit of a real double-tap.
+      //
+      // Cap-touch boost: while the user is touching the cap pad, drop
+      // the threshold to 60% so soft taps on the pad-side register.
       float effThreshold = tapThreshold_;
       if (touch().isTouched()) effThreshold *= 0.6f;
 
+      // Body-Z axis dominance of the linear-accel vector. Body-Z is
+      // perpendicular to the cap-pad face, so any deliberate tap on
+      // that face spikes mostly along Z regardless of cube orientation.
+      float zAlign = (linMag > 0.001f) ? fabsf(laz) / linMag : 0.0f;
+      const bool alongZ        = (zAlign > 0.55f);
+
       const bool prevQuiet     = (lastLinMag_ < effThreshold * 0.5f);
       const bool inShakeWindow = (nowMs - lastShakeMs_) < 300;
+      const bool inTapChain    = (tapCount_ > 0 &&
+                                  nowMs - lastTapMs_ < tripleTapWindowMs_);
+
+      bool fire = false;
       if (linMag > effThreshold &&
           nowMs > tapCooldownUntilMs_ &&
-          prevQuiet && !inShakeWindow) {
+          !inShakeWindow &&
+          alongZ &&
+          (inTapChain || prevQuiet)) {
+        fire = true;
+      }
+      if (fire) {
         tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
         if (tapCount_ == 0 || (nowMs - lastTapMs_) > tripleTapWindowMs_) {
           tapCount_ = 1;

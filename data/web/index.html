@@ -51,6 +51,17 @@
       <button class="btn ghost" id="btn-group-study">Group study (beta)</button>
     </article>
 
+    <!-- Quick games — minigames that read tap/shake/flip on the cube. -->
+    <article class="card" id="games-card">
+      <h3>Quick games</h3>
+      <p class="subtle">Tap / shake / flip the cube to play. Watch the OLED for prompts.</p>
+      <div class="btn-row" style="margin-top: var(--s-2)">
+        <button class="btn ghost" data-game="reaction">Reaction Time</button>
+        <button class="btn ghost" data-game="bopit">Bop It</button>
+      </div>
+      <p class="subtle muted" id="games-status" style="margin-top: var(--s-2)">—</p>
+    </article>
+
     <!-- Running: live timer -->
     <article class="card" id="session-running" hidden>
       <h3 id="running-label">In session</h3>

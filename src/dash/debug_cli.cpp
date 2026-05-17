@@ -327,6 +327,15 @@ void DebugCli::dispatch(const String& line) {
     return;
   }
 
+  if (cmd == "game") {
+    if (n >= 2 && t[1] == "reaction") { games().startGame(GameId::Reaction); return; }
+    if (n >= 2 && t[1] == "bopit")    { games().startGame(GameId::BopIt);    return; }
+    if (n >= 2 && t[1] == "stop")     { games().stopGame();                  return; }
+    Serial.printf("current=%d last_score=%u\n",
+                  (int)games().current(), (unsigned)games().lastScore());
+    return;
+  }
+
   if (cmd == "selftest") { runSelfTest(); return; }
 
   Serial.printf("[CLI] unknown command: %s\n", cmd.c_str());

@@ -75,6 +75,13 @@ class Display {
   // Pause/resume autonomous look-around (used during gameplay).
   void setAutoLook(bool on);
 
+  // Aim the eyes at a continuous direction in [-1..1] x [-1..1].
+  // (+x = right, +y = up). Each call animates the eyes toward the target
+  // over ~200 ms so rapid calls produce a smooth gaze rather than jitter.
+  // Disables autoLook for the duration; re-enable with setAutoLook(true)
+  // if you stop driving lookAt yourself.
+  void lookAt(float x, float y);
+
   // Low-level: pause the render task (e.g. before talking to I2C from another
   // task). Re-call with false to resume.
   void pause(bool on);

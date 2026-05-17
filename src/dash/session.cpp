@@ -110,6 +110,9 @@ void Session::stop(bool celebrate) {
   // happened to be still during the session — they just earned a moment of
   // celebration, not the sleepy face.
   idleManager().poke();
+  // Clear the progress-bar overlay installed by tick() during the
+  // session — without this the bar stays painted on the OLED after stop.
+  display().clearOverlay();
   if (celebrate) {
     // Milestone celebrations: total session count crosses round numbers gets
     // an extra-long heart-eye finale. The completed bit is what we just wrote
