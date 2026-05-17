@@ -490,6 +490,13 @@ void faceFlipSleepTask(void* /*arg*/) {
   dash::sounds::play(dash::sounds::kSleep);
   dash::character().playSleepAnimation();
   dash::power().enterDeepSleep(0);
+  // enterDeepSleep returns when the cube wakes (motion / touch).
+  // Restore state + play wake animation. The state machine was left in
+  // Asleep by the caller path.
+  dash::sounds::play(dash::sounds::kWake);
+  dash::character().playWakeAnimation();
+  dash::stateMachine().transitionTo(dash::DeviceState::Idle);
+  dash::character().setMood(dash::Mood::Neutral);
   vTaskDelete(nullptr);
 }
 

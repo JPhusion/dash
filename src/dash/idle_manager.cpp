@@ -91,8 +91,15 @@ void IdleManager::loop() {
         } else if (level >= 5) {
           stateMachine().transitionTo(DeviceState::Asleep);
           display().setEyeState(EyeState::Asleep);
-          // Trigger the actual deep-sleep transition.
+          // enterDeepSleep is light-sleep under the hood now — returns
+          // when the cube wakes (motion / touch). Restore state +
+          // animation on wake.
           power().enterDeepSleep(0);
+          display().setEyeState(EyeState::Idle);
+          stateMachine().transitionTo(DeviceState::Idle);
+          power().setCpuProfile(CpuProfile::Performance);
+          lastActivityMs_ = millis();   // reset drowsy progression
+          lastDrowsyLevel_ = 0;
         } else {
           stateMachine().transitionTo(DeviceState::Drowsy);
           display().setEyeState(eyeForDrowsyLevel(level));

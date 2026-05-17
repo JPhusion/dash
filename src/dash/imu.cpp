@@ -15,8 +15,16 @@ constexpr const char* kTag = "Imu";
 
 constexpr uint8_t kMpuAddr      = 0x68;
 constexpr uint8_t kRegPwrMgmt1  = 0x6B;
+constexpr uint8_t kRegPwrMgmt2  = 0x6C;
 constexpr uint8_t kRegWhoAmI    = 0x75;
 constexpr uint8_t kRegAccelXout = 0x3B;
+constexpr uint8_t kRegSignalPathReset = 0x68;
+constexpr uint8_t kRegAccelConfig = 0x1C;
+constexpr uint8_t kRegMotDetectCtrl = 0x69;
+constexpr uint8_t kRegMotThr    = 0x1F;
+constexpr uint8_t kRegMotDur    = 0x20;
+constexpr uint8_t kRegIntPinCfg = 0x37;
+constexpr uint8_t kRegIntEnable = 0x38;
 
 constexpr float kAccScale  = 16384.0f;   // ±2g
 constexpr float kGyroScale = 131.0f;     // ±250 deg/s
@@ -286,6 +294,64 @@ void Imu::resetTapState() {
                                           // a tap that arrived JUST before
                                           // the reset doesn't immediately
                                           // re-arm the chain.
+}
+
+void Imu::enableWakeOnMotion(uint16_t thresholdMg) {
+  // 1. Stop the sample loop so we own the I2C bus.
+  bool wasRunning = running_;
+  running_ = false;
+  if (sampleTask_ != nullptr) {
+    for (int i = 0; i < 50 && eTaskGetState(sampleTask_) != eDeleted; ++i) {
+      vTaskDelay(pdMS_TO_TICKS(10));
+    }
+  }
+
+  // Per MPU-6050 product spec § "Wake-on-Motion Interrupt Configuration":
+  //   1. Reset signal paths.
+  //   2. ACCEL_CONFIG = 0 (no DLPF, no HPF).
+  //   3. INT_PIN_CFG: push-pull, active-high, latched until cleared.
+  //   4. INT_ENABLE: MOT_EN = 1.
+  //   5. Wait > 1 ms for accel to settle.
+  //   6. ACCEL_CONFIG: DHPF = HOLD (0x07).
+  //   7. MOT_DETECT_CTRL: ACCEL_ON_DELAY = 0, MOT_COUNT = 1.
+  //   8. MOT_THR / MOT_DUR.
+  //   9. PWR_MGMT_2: LP_WAKE_CTRL = 11 (40 Hz), all gyro standby.
+  //  10. PWR_MGMT_1: CYCLE = 1, SLEEP = 0, TEMP_DIS = 1.
+  writeMpu(kRegSignalPathReset, 0x07);   // gyro+accel+temp signal reset
+  delay(2);
+  writeMpu(kRegAccelConfig,   0x00);
+  writeMpu(kRegIntPinCfg,     0xA0);     // INT_LEVEL=0 (active-high), latch, clear on any read
+  writeMpu(kRegIntEnable,     0x40);     // MOT_EN
+  delay(2);
+  writeMpu(kRegAccelConfig,   0x07);     // DHPF = Hold
+  writeMpu(kRegMotDetectCtrl, 0x15);     // accel power-on delay + mot count
+  // Threshold register is in 2 mg units; clamp [1, 255].
+  uint16_t thrReg = thresholdMg / 2;
+  if (thrReg == 0) thrReg = 1;
+  if (thrReg > 255) thrReg = 255;
+  writeMpu(kRegMotThr, (uint8_t)thrReg);
+  writeMpu(kRegMotDur, 1);                // 1 ms minimum
+  writeMpu(kRegPwrMgmt2, 0x07);           // gyro X/Y/Z standby; accel on
+  writeMpu(kRegPwrMgmt1, 0x28);           // CYCLE=1 + TEMP_DIS
+
+  log::info(kTag, "WoM enabled, threshold ~%umg", (unsigned)(thrReg * 2));
+  (void)wasRunning;
+}
+
+void Imu::disableWakeOnMotion() {
+  // Bring the MPU-6050 back to its normal sampling configuration. Mirrors
+  // the begin() init path so the sample loop restarts cleanly.
+  writeMpu(kRegPwrMgmt1, 0x00);     // wake, no cycle
+  delay(10);
+  writeMpu(kRegPwrMgmt2, 0x00);     // all axes active
+  writeMpu(kRegIntEnable, 0x00);    // disable motion interrupt
+  writeMpu(kRegAccelConfig, 0x00);
+  writeMpu(kRegMotDetectCtrl, 0x00);
+  // Re-arm sampling task.
+  running_ = true;
+  xTaskCreatePinnedToCore(&Imu::sampleTaskTrampoline, "imu-sample", 4096, this,
+                          3, &sampleTask_, 1);
+  log::info(kTag, "WoM disabled, sample loop restarted");
 }
 
 void Imu::emit(ImuEvent e) {

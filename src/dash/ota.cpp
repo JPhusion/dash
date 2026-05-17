@@ -8,6 +8,7 @@
 #include <mbedtls/sha256.h>
 
 #include "dash/build_info.h"
+#include "dash/display.h"
 #include "dash/log.h"
 #include "dash/settings.h"
 #include "dash/wifi_ap.h"
@@ -158,6 +159,8 @@ bool Ota::downloadAndFlash(const String& url, const String& expectedHash) {
   mbedtls_sha256_init(&sha);
   mbedtls_sha256_starts(&sha, 0);
 
+  display().showText("Pulling 0%", "");
+  int lastShownPct = 0;
   while (http.connected() && (total < (size_t)len)) {
     size_t avail = stream->available();
     if (avail) {
@@ -172,12 +175,20 @@ bool Ota::downloadAndFlash(const String& url, const String& expectedHash) {
         }
         mbedtls_sha256_update(&sha, buf, got);
         total += got;
+        int pct = (int)((total * 100) / (size_t)len);
+        if (pct >= lastShownPct + 5 || pct == 100) {
+          char line[16];
+          snprintf(line, sizeof(line), "Pulling %d%%", pct);
+          display().showText(line, "");
+          lastShownPct = pct;
+        }
       }
     } else {
       delay(1);
     }
   }
   http.end();
+  display().showText("Verifying", "");
   uint8_t digest[32];
   mbedtls_sha256_finish(&sha, digest);
   mbedtls_sha256_free(&sha);
@@ -196,6 +207,7 @@ bool Ota::downloadAndFlash(const String& url, const String& expectedHash) {
     log::warn(kTag, "no expected hash supplied — skipping verify");
   }
 
+  display().showText("Installing", "");
   if (!Update.end(true)) {
     log::error(kTag, "Update.end: %u", Update.getError());
     return false;
@@ -205,28 +217,55 @@ bool Ota::downloadAndFlash(const String& url, const String& expectedHash) {
 }
 
 OtaResult Ota::checkAndApply() {
-  if (settings().homeWifiSsid().length() == 0) return OtaResult::NoCredentials;
-  if (!ensureStation()) return OtaResult::ConnectFailed;
+  if (settings().homeWifiSsid().length() == 0) {
+    display().showText("OTA", "No WiFi set");
+    delay(1500);
+    display().clearOverlay();
+    return OtaResult::NoCredentials;
+  }
+  display().showText("OTA", "Connecting…");
+  if (!ensureStation()) {
+    display().showText("OTA", "Connect fail");
+    delay(2000);
+    display().clearOverlay();
+    return OtaResult::ConnectFailed;
+  }
 
+  display().showText("OTA", "Checking…");
   String tag, assetUrl;
   if (!fetchLatestTag(tag, assetUrl)) {
+    display().showText("OTA", "Check fail");
+    delay(2000);
+    display().clearOverlay();
     teardownStation();
     return OtaResult::CheckFailed;
   }
   log::info(kTag, "remote tag %s, local %s", tag.c_str(), kFirmwareVersion);
   if (!isNewer(tag, kFirmwareVersion)) {
+    display().showText("OTA", "Up to date");
+    delay(1500);
+    display().clearOverlay();
     teardownStation();
     return OtaResult::UpToDate;
   }
 
+  char foundLine[24];
+  snprintf(foundLine, sizeof(foundLine), "%s", tag.c_str());
+  display().showText("New version", foundLine);
+  delay(900);
+
   String hash = "";  // could be fetched from a sibling firmware.bin.sha256 asset
   if (!downloadAndFlash(assetUrl, hash)) {
+    display().showText("OTA", "Write fail");
+    delay(2500);
+    display().clearOverlay();
     teardownStation();
     return OtaResult::WriteFailed;
   }
   teardownStation();
+  display().showText("OTA", "Rebooting…");
   log::info(kTag, "rebooting into new firmware");
-  delay(500);
+  delay(800);
   ESP.restart();
   return OtaResult::Updated;
 }

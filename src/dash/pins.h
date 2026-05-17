@@ -22,8 +22,13 @@ inline constexpr int I2S_LRCLK = 26;
 // Capacitive touch (T7).
 inline constexpr int TOUCH = 27;
 
-// MPU-6050 motion interrupt — not wired on v1 prototype. Reserved RTC GPIO for v2.
-inline constexpr int IMU_INT = -1;
+// MPU-6050 motion interrupt — wired to GPIO 19 on this cube. NOT an RTC
+// GPIO, so it can't drive a deep-sleep wake; we use light sleep + GPIO
+// wake instead. No external pull resistor, so the firmware enables the
+// internal pull-down before sleep (the MPU's INT pin is push-pull
+// active-HIGH by default, so it idles LOW with the pull-down and pulses
+// HIGH on motion).
+inline constexpr int IMU_INT = 19;
 
 // USB 5V sense — not wired; software assumes USB-attached during bring-up.
 inline constexpr int USB_VBUS = -1;

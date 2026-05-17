@@ -107,6 +107,20 @@ class Imu {
   // double / triple-tap classification.
   void resetTapState();
 
+  // Wake-on-Motion. Stops the sample loop, then writes the MPU-6050's
+  // low-power motion-detect sequence so the chip drops to ~10 µA but
+  // pulses its INT pin when accel magnitude exceeds threshold. Caller
+  // is responsible for enabling GPIO wake on pins::IMU_INT.
+  //
+  // thresholdMg is in milli-g (the register accepts units of 2 mg, so
+  // values are rounded). Default 80 mg matches a deliberate shake but
+  // ignores hand tremor.
+  void enableWakeOnMotion(uint16_t thresholdMg = 80);
+
+  // Reverses enableWakeOnMotion and restarts the sample loop with the
+  // normal high-rate configuration. Call after waking up.
+  void disableWakeOnMotion();
+
  private:
   static void sampleTaskTrampoline(void* arg);
   static void eventTaskTrampoline(void* arg);
