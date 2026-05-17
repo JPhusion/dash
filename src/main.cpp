@@ -34,6 +34,70 @@ static uint32_t g_faceDownSinceMs = 0;
 static uint8_t  g_lastStationCount = 0;
 static uint32_t g_lastLookMs = 0;
 
+// ---- Gesture-driven games menu --------------------------------------------
+//
+// Long-press the cap pad to open. Shake the cube to cycle items, tap to
+// select, triple-tap (or 10 s of no input) to exit.
+namespace menu {
+
+constexpr const char* kItems[] = { "Reaction", "Bop It", "Exit" };
+constexpr uint8_t kItemCount = sizeof(kItems) / sizeof(kItems[0]);
+constexpr uint32_t kAutoExitMs = 10000;
+
+uint8_t  index = 0;
+uint32_t lastActivityMs = 0;
+bool     active = false;
+
+void showCurrent() {
+  dash::display().showText("Tap to play", kItems[index]);
+}
+void enter() {
+  if (active) return;
+  active = true; index = 0; lastActivityMs = millis();
+  dash::log::info("Menu", "open: %s", kItems[index]);
+  dash::stateMachine().transitionTo(dash::DeviceState::InMenu);
+  dash::character().setMood(dash::Mood::Playful);
+  dash::sounds::play(dash::sounds::kMenuBlip, true);
+  showCurrent();
+}
+void exit_(bool playSound = true) {
+  if (!active) return;
+  active = false;
+  dash::log::info("Menu", "close");
+  if (playSound) dash::sounds::play(dash::sounds::kMenuBack, true);
+  dash::display().clearOverlay();
+  dash::character().setMood(dash::Mood::Neutral);
+  dash::stateMachine().transitionTo(dash::DeviceState::Idle);
+}
+void next() {
+  lastActivityMs = millis();
+  index = (index + 1) % kItemCount;
+  dash::log::info("Menu", "→ %s", kItems[index]);
+  dash::sounds::play(dash::sounds::kMenuBlip, true);
+  showCurrent();
+}
+void select() {
+  lastActivityMs = millis();
+  dash::log::info("Menu", "select %s", kItems[index]);
+  dash::sounds::play(dash::sounds::kMenuConfirm, true);
+  active = false;
+  dash::display().clearOverlay();
+  const char* item = kItems[index];
+  if (strcmp(item, "Exit") == 0) {
+    dash::character().setMood(dash::Mood::Neutral);
+    dash::stateMachine().transitionTo(dash::DeviceState::Idle);
+  } else if (strcmp(item, "Reaction") == 0) {
+    dash::games().startGame(dash::GameId::Reaction);
+  } else if (strcmp(item, "Bop It") == 0) {
+    dash::games().startGame(dash::GameId::BopIt);
+  }
+}
+void tickAutoExit() {
+  if (active && millis() - lastActivityMs > kAutoExitMs) exit_(true);
+}
+
+}  // namespace menu
+
 namespace {
 
 // IMU event handlers that involve long animations or sound sequences run
@@ -91,6 +155,7 @@ void onImuEvent(const dash::ImuEvent& e) {
   switch (e.type) {
     case ImuEventType::Tap:
       dash::log::info("Main", "tap (mag=%.2fg)", e.magnitude);
+      if (menu::active) { menu::select(); break; }
       dash::display().blink();
       dash::sounds::playTapAck();
       break;
@@ -116,19 +181,15 @@ void onImuEvent(const dash::ImuEvent& e) {
       }
       break;
     case ImuEventType::TripleTap:
-      dash::log::info("Main", "triple-tap (deep-sleep gesture)");
-      // Defer the ~2s sleep animation + chime sequence onto its own task
-      // so the imu event listener chain returns immediately. Otherwise a
-      // shake or tap that immediately follows a triple-tap is held up
-      // for the duration of the sleep animation.
+      dash::log::info("Main", "triple-tap");
+      if (menu::active) { menu::exit_(true); break; }
+      // Otherwise: deep-sleep gesture, deferred onto its own task.
       xTaskCreate(&deferred::sleepSequenceTask, "sleep-seq", 4096,
                   nullptr, 1, nullptr);
       break;
     case ImuEventType::Shake:
       dash::log::info("Main", "shake (mag=%.2f)", e.magnitude);
-      // Cute "whoa!" — the cube losing its balance. Dizzy / confused eyes
-      // for ~1.5s. Reaction is gated by the shake refractory in the IMU
-      // so it can't spam.
+      if (menu::active) { menu::next(); break; }
       dash::sounds::play(dash::sounds::kWhoa, true);
       dash::character().react(dash::EyeState::Confused, 1500);
       break;
@@ -188,10 +249,13 @@ void onTouchEvent(const dash::TouchEvent& e) {
       }
       break;
     case dash::TouchEventType::LongPress:
-      dash::log::info("Main", "long-press → sleep");
+      dash::log::info("Main", "long-press → menu");
       dash::portal().recordDiagEvent("TouchLong");
-      xTaskCreate(&deferred::faceFlipSleepTask, "lp-sleep", 4096,
-                  nullptr, 1, nullptr);
+      if (menu::active) {
+        menu::exit_(true);
+      } else if (dash::stateMachine().state() == dash::DeviceState::Idle) {
+        menu::enter();
+      }
       break;
   }
 }
@@ -330,6 +394,9 @@ void loop() {
     }
     g_lastStationCount = stationCount;
   }
+
+  // Menu auto-exits after 10s of inactivity so it gets out of the way.
+  menu::tickAutoExit();
 
   if (now - g_lastHeartbeatMs >= 10000) {
     g_lastHeartbeatMs = now;

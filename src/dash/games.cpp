@@ -60,6 +60,7 @@ void Games::loop() {
   if (current_ == GameId::Reaction) runReaction();
   else if (current_ == GameId::BopIt) runBopIt();
   // Return to Idle.
+  display().clearOverlay();
   character().setMood(Mood::Neutral);
   stateMachine().transitionTo(DeviceState::Idle);
   current_ = GameId::None;
@@ -72,15 +73,19 @@ void Games::runReaction() {
   uint32_t totalScore = 0;
   const uint8_t kRounds = 5;
   for (uint8_t round = 0; round < kRounds && current_ != GameId::None; round++) {
-    display().setEyeState(EyeState::Idle);
+    // "Get ready" prompt while we wait a random interval.
+    char buf[24];
+    snprintf(buf, sizeof(buf), "READY %u/%u", round + 1, kRounds);
+    display().showBig(buf);
     uint32_t wait = 1500 + (esp_random() % 3000);
     delay(wait);
     if (current_ == GameId::None) return;
 
+    // GO! — full-screen inverted prompt. Visually unmissable.
     expectedAction_ = 0;
     actionConsumed_ = false;
     actionMs_ = millis();
-    display().setEyeState(EyeState::Surprised);
+    display().showInverted("GO!");
 
     uint32_t deadline = millis() + 3000;
     while (!actionConsumed_ && millis() < deadline) delay(5);
@@ -88,17 +93,22 @@ void Games::runReaction() {
     if (actionConsumed_) {
       totalScore += (3000 - reactionMs);
       audio().play(sounds::kGameCorrect);
-      display().setEyeState(EyeState::Happy);
+      char rt[24];
+      snprintf(rt, sizeof(rt), "%lu ms", (unsigned long)reactionMs);
+      display().showBig(rt);
     } else {
       audio().play(sounds::kGameWrong);
-      display().setEyeState(EyeState::Sad);
+      display().showBig("MISS");
     }
-    delay(800);
+    delay(900);
   }
   lastScore_ = totalScore;
   log::info(kTag, "Reaction score=%u", (unsigned)totalScore);
   audio().play(sounds::kEncouragement);
-  display().showText("score", String(totalScore).c_str());
+  // Final score on its own screen.
+  char score[24];
+  snprintf(score, sizeof(score), "%u", (unsigned)totalScore);
+  display().showText("Reaction", score);
   delay(2500);
   display().clearOverlay();
 }
@@ -112,30 +122,32 @@ void Games::runBopIt() {
     expectedAction_ = action;
     actionConsumed_ = false;
     actionMs_ = millis();
-    display().showText(actionName(action));
+    // Each prompt is full-screen and big — the user is reading the cube
+    // from across the desk while reacting fast.
+    display().showBig(actionName(action));
     audio().play(sounds::kMenuBlip);
 
     uint32_t deadline = millis() + window;
     while (!actionConsumed_ && millis() < deadline) delay(5);
     if (!actionConsumed_) {
       audio().play(sounds::kGameWrong);
-      display().setEyeState(EyeState::Sad);
-      display().clearOverlay();
-      delay(800);
+      display().showInverted("MISS");
+      delay(900);
       break;
     }
     score++;
     audio().play(sounds::kGameCorrect);
-    display().setEyeState(EyeState::Happy);
-    delay(250);
-    display().clearOverlay();
-    // Speed up.
+    // Brief "NICE" between prompts so the player feels the streak.
+    display().showInverted("NICE");
+    delay(220);
     if (window > 600) window -= 60;
   }
   lastScore_ = score;
   log::info(kTag, "Bop It score=%u", (unsigned)score);
   audio().play(sounds::kEncouragement);
-  display().showText("rounds", String(score).c_str());
+  char str[24];
+  snprintf(str, sizeof(str), "%u", (unsigned)score);
+  display().showText("Bop It", str);
   delay(2500);
   display().clearOverlay();
 }

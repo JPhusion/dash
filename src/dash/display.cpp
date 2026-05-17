@@ -158,6 +158,24 @@ void Display::showQR(const char* data) {
   xSemaphoreGive(mutex_);
 }
 
+void Display::showBig(const char* word) {
+  xSemaphoreTake(mutex_, portMAX_DELAY);
+  overlay_ = Overlay::Big;
+  strncpy(text1_, word ? word : "", sizeof(text1_) - 1);
+  text1_[sizeof(text1_) - 1] = '\0';
+  text2_[0] = '\0';
+  xSemaphoreGive(mutex_);
+}
+
+void Display::showInverted(const char* word) {
+  xSemaphoreTake(mutex_, portMAX_DELAY);
+  overlay_ = Overlay::Inverted;
+  strncpy(text1_, word ? word : "", sizeof(text1_) - 1);
+  text1_[sizeof(text1_) - 1] = '\0';
+  text2_[0] = '\0';
+  xSemaphoreGive(mutex_);
+}
+
 void Display::clearOverlay() {
   xSemaphoreTake(mutex_, portMAX_DELAY);
   overlay_ = Overlay::None;
@@ -216,15 +234,39 @@ void Display::renderTaskLoop() {
       appliedEye_ = want;
     }
 
-    // For overlays that hide the eyes (Text, QR, BootSplash) we draw entirely
-    // ourselves. For Progress we let the eye library draw, then overlay a bar.
-    if (overlay == Overlay::Text || overlay == Overlay::QR ||
-        overlay == Overlay::BootSplash) {
+    // For overlays that hide the eyes (Text, QR, BootSplash, Big,
+    // Inverted) we draw entirely ourselves. For Progress we let the eye
+    // library draw, then overlay a bar.
+    const bool isHidingOverlay =
+        (overlay == Overlay::Text || overlay == Overlay::QR ||
+         overlay == Overlay::BootSplash ||
+         overlay == Overlay::Big || overlay == Overlay::Inverted);
+
+    if (isHidingOverlay) {
       u8g2.clearBuffer();
+      if (overlay == Overlay::Inverted) {
+        // White (filled) background, black (cutout) text. Done by drawing
+        // a filled rect then setDrawColor(0) for the glyphs.
+        u8g2.setDrawColor(1);
+        u8g2.drawBox(0, 0, kScreenWidth, kScreenHeight);
+        u8g2.setDrawColor(0);
+      } else {
+        u8g2.setDrawColor(1);
+      }
+
       if (overlay == Overlay::BootSplash) {
         u8g2.setFont(u8g2_font_logisoso24_tr);
         u8g2.setCursor(20, 44);
         u8g2.print("Dash");
+      } else if (overlay == Overlay::Big || overlay == Overlay::Inverted) {
+        u8g2.setFont(u8g2_font_logisoso24_tr);
+        if (l1[0]) {
+          int w = u8g2.getStrWidth(l1);
+          int x = (kScreenWidth - w) / 2;
+          if (x < 2) x = 2;
+          u8g2.setCursor(x, 46);
+          u8g2.print(l1);
+        }
       } else if (overlay == Overlay::Text) {
         u8g2.setFont(u8g2_font_helvR12_tr);
         if (l1[0]) {
@@ -245,6 +287,7 @@ void Display::renderTaskLoop() {
         u8g2.setCursor(0, 20);
         u8g2.print(qr);
       }
+      u8g2.setDrawColor(1);    // restore for subsequent draws
       u8g2.sendBuffer();
     } else {
       // Normal eye render path. For Progress overlay we have the eye lib

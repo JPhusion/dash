@@ -45,6 +45,8 @@ enum class Overlay : uint8_t {
   Progress,         // shows EyeState plus a thin progress bar at the bottom
   Text,             // hides eyes, prints centered text instead
   QR,               // hides eyes, draws a QR code
+  Big,              // hides eyes, prints one BIG word centred (game prompts)
+  Inverted,         // big text but the whole screen inverted (reaction GO!)
 };
 
 class Display {
@@ -67,6 +69,13 @@ class Display {
   void showProgress(uint8_t percent);     // 0..100
   void showText(const char* line1, const char* line2 = nullptr);
   void showQR(const char* data);          // null-terminated payload
+
+  // Game-prompt overlays: one big word centered. `Big` is normal
+  // (black bg, white text); `Inverted` swaps to draw white bg + black
+  // text, which is the "GO!" cue in Reaction Time.
+  void showBig(const char* word);
+  void showInverted(const char* word);
+
   void clearOverlay();
 
   // Force a one-shot blink (otherwise eye library blinks autonomously).
