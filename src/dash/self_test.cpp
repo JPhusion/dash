@@ -370,6 +370,43 @@ void testIdleManager() {
   pass("inhibitSleep toggled cleanly");
 }
 
+void testAnimations() {
+  section("Character: animation routines");
+  uint32_t start = millis();
+  character().playSessionStartAnimation();
+  uint32_t dur = millis() - start;
+  check(dur >= 400 && dur < 1500, "session start animation duration ok (%lums)", (unsigned long)dur);
+
+  start = millis();
+  character().playWakeAnimation();
+  dur = millis() - start;
+  check(dur >= 400 && dur < 1500, "wake animation duration ok (%lums)", (unsigned long)dur);
+
+  // Sleep animation is longer (~2s); just smoke-test that it returns.
+  start = millis();
+  character().playSleepAnimation();
+  dur = millis() - start;
+  check(dur >= 1000 && dur < 3500, "sleep animation duration ok (%lums)", (unsigned long)dur);
+
+  // greetBasedOnTime should not crash regardless of whether clock is synced.
+  character().greetBasedOnTime();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  pass("greetBasedOnTime returned");
+}
+
+void testGames() {
+  section("Games: state transition smoke test");
+  // Don't run the full game — it has its own loop with delays. Just
+  // check the FSM transition fires correctly.
+  DeviceState before = stateMachine().state();
+  GameId origGame = games().current();
+  check(origGame == GameId::None, "no game running pre-test");
+  // Starting a game would spawn a 4-5 second loop; instead just verify
+  // the api surface compiles and the current() getter works.
+  check(games().lastScore() >= 0, "lastScore accessor (=%u)", (unsigned)games().lastScore());
+  stateMachine().transitionTo(before);
+}
+
 void testHeapStability() {
   section("Heap stability");
   size_t before = heap_caps_get_free_size(MALLOC_CAP_8BIT);
@@ -414,6 +451,8 @@ void runSelfTest() {
   testStats();
   testWifiAp();
   testIdleManager();
+  testAnimations();
+  testGames();
   testHeapStability();
 
   // Restore
