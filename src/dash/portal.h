@@ -29,8 +29,17 @@ class Portal {
   void begin();           // registers routes against WifiAp's WebServer
   bool isClientConnected() const;
 
+  // Diagnostic recorder — fed by IMU/Touch listeners in main. The /diag.html
+  // walkthrough polls /api/diag-event to detect peripheral activity step
+  // by step.
+  void recordDiagEvent(const char* name);
+  const char* lastDiagEvent() const { return lastDiagEvent_; }
+  uint32_t lastDiagEventMs() const { return lastDiagEventMs_; }
+
  private:
   uint32_t lastClientMs_;
+  char lastDiagEvent_[24];
+  uint32_t lastDiagEventMs_;
 };
 
 Portal& portal();

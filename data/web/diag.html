@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <title>Dash Diagnostics</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="shell">
+  <header class="app-header">
+    <div class="logo">Dash · Diag</div>
+    <a class="status-pill" href="/" style="text-decoration:none">exit</a>
+  </header>
+
+  <article class="card hero">
+    <div class="step-dots" id="dots" aria-hidden="true"></div>
+    <h2 id="step-title">Hardware diagnostic</h2>
+    <p class="subtle" id="step-instruction">Walk through every peripheral one at a time. Tap the cube to begin.</p>
+    <div id="step-status" class="subtle muted" style="min-height: 24px; margin-top: var(--s-3);">—</div>
+    <div class="btn-row" style="margin-top: var(--s-4)">
+      <button class="btn ghost" id="btn-skip">Skip step</button>
+      <button class="btn ghost" id="btn-pass" hidden>Pass</button>
+      <button class="btn danger" id="btn-fail" hidden>Fail</button>
+    </div>
+  </article>
+
+  <article class="card">
+    <h3>Results so far</h3>
+    <div id="results" class="col">
+      <span class="subtle">Nothing yet.</span>
+    </div>
+  </article>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+const steps = [
+  { id: "boot",     name: "Boot OK",          auto: true,
+    instruction: "Confirm Dash is responding to the portal." },
+  { id: "imu",      name: "IMU readout",      auto: true,
+    instruction: "Reading orientation from the IMU..." },
+  { id: "tap",      name: "Tap detection",
+    instruction: "Tap Dash once. The cube should blink and chirp." },
+  { id: "double",   name: "Double-tap",
+    instruction: "Double-tap Dash. Eyes should look surprised." },
+  { id: "shake",    name: "Shake detection",
+    instruction: "Give Dash a gentle side-to-side shake." },
+  { id: "orient",   name: "Orientation",
+    instruction: "Rotate Dash so a different face is up, then back." },
+  { id: "touch",    name: "Cap touch",
+    instruction: "Touch the cap-touch pad on the cube." },
+  { id: "oled",     name: "OLED",
+    instruction: "Are the eyes drawing correctly on the OLED?",
+    manual: true },
+  { id: "sound",    name: "Speaker",
+    instruction: "Did you hear the test tone?",
+    manual: true,
+    onEnter: async () => { await api("/api/test-tone", { method: "POST" }); } },
+];
+
+let cur = 0;
+const results = {};
+
+function renderDots() {
+  $("dots").innerHTML = "";
+  for (let i = 0; i < steps.length; i++) {
+    const d = document.createElement("span");
+    if (i === cur) d.classList.add("on");
+    if (results[steps[i].id] === "pass") d.style.background = "var(--success)";
+    else if (results[steps[i].id] === "fail") d.style.background = "var(--danger)";
+    $("dots").appendChild(d);
+  }
+}
+
+function renderStep() {
+  const step = steps[cur];
+  if (!step) {
+    $("step-title").textContent = "Done";
+    $("step-instruction").textContent =
+      "All steps complete. Tap exit to return.";
+    $("btn-skip").hidden = true;
+    $("btn-pass").hidden = true;
+    $("btn-fail").hidden = true;
+    return;
+  }
+  $("step-title").textContent = `Step ${cur+1}/${steps.length} · ${step.name}`;
+  $("step-instruction").textContent = step.instruction;
+  $("step-status").textContent = "...";
+  $("btn-skip").hidden = false;
+  $("btn-pass").hidden = !step.manual;
+  $("btn-fail").hidden = !step.manual;
+  renderDots();
+  if (step.onEnter) step.onEnter();
+  if (step.auto) {
+    autoRun(step);
+  } else if (!step.manual) {
+    pollStep(step);
+  }
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    headers: { "content-type": "application/json" }, ...opts,
+  });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const ct = r.headers.get("content-type") || "";
+  return ct.includes("json") ? await r.json() : await r.text();
+}
+
+async function autoRun(step) {
+  if (step.id === "boot") {
+    try {
+      const s = await api("/api/status");
+      record("boot", s ? "pass" : "fail",
+             `firmware ${s.firmware}, boot #${s.boot_count}`);
+    } catch (e) {
+      record("boot", "fail", "no response from device");
+    }
+    setTimeout(next, 1500);
+  } else if (step.id === "imu") {
+    try {
+      const s = await api("/api/status");
+      record("imu", "pass", `face=${s.face}`);
+    } catch (e) {
+      record("imu", "fail", String(e));
+    }
+    setTimeout(next, 1500);
+  }
+}
+
+// Poll /api/diag-event to see what IMU/touch event last fired.
+async function pollStep(step) {
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline) {
+    try {
+      const s = await api("/api/diag-event");
+      if (matched(step, s)) {
+        record(step.id, "pass", `saw "${s.last_event}"`);
+        next();
+        return;
+      }
+      $("step-status").textContent = `waiting for ${expected(step)}`;
+    } catch (e) {}
+    await sleep(300);
+  }
+  record(step.id, "fail", "timeout");
+  next();
+}
+
+function expected(step) {
+  switch (step.id) {
+    case "tap":    return "a tap on the cube";
+    case "double": return "a double-tap";
+    case "shake":  return "a shake";
+    case "orient": return "an orientation change";
+    case "touch":  return "a cap-touch";
+  }
+  return "input";
+}
+
+function matched(step, ev) {
+  if (!ev || !ev.last_event) return false;
+  const e = ev.last_event;
+  switch (step.id) {
+    case "tap":    return e === "Tap";
+    case "double": return e === "DoubleTap";
+    case "shake":  return e === "Shake";
+    case "orient": return e === "OrientationChange";
+    case "touch":  return e.startsWith("Touch");
+  }
+  return false;
+}
+
+function record(id, result, detail) {
+  results[id] = result;
+  const r = $("results");
+  if (r.querySelector(".empty")) r.innerHTML = "";
+  if (r.children.length === 1 && r.firstElementChild.classList.contains("subtle")) {
+    r.innerHTML = "";
+  }
+  const row = document.createElement("div");
+  row.className = "settings-row";
+  const tone = result === "pass" ? "text-success" : "text-warn";
+  row.innerHTML =
+    `<div class="label">
+       <span class="name">${steps.find(s => s.id === id).name}</span>
+       ${detail ? `<span class="hint">${detail}</span>` : ""}
+     </div>
+     <span class="${tone}" style="font-weight:700">${result === "pass" ? "✓" : "✗"}</span>`;
+  r.appendChild(row);
+}
+
+function next() { cur++; renderStep(); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("btn-skip").addEventListener("click", () => {
+    record(steps[cur].id, "fail", "skipped");
+    next();
+  });
+  $("btn-pass").addEventListener("click", () => {
+    record(steps[cur].id, "pass", "user confirmed");
+    next();
+  });
+  $("btn-fail").addEventListener("click", () => {
+    record(steps[cur].id, "fail", "user denied");
+    next();
+  });
+  renderStep();
+});
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2000);
+}
+</script>
+</body>
+</html>

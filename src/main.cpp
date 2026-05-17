@@ -34,8 +34,22 @@ static uint8_t  g_lastStationCount = 0;
 
 namespace {
 
+const char* imuEventName(dash::ImuEventType t) {
+  using dash::ImuEventType;
+  switch (t) {
+    case ImuEventType::Tap:              return "Tap";
+    case ImuEventType::DoubleTap:        return "DoubleTap";
+    case ImuEventType::TripleTap:        return "TripleTap";
+    case ImuEventType::Shake:            return "Shake";
+    case ImuEventType::OrientationChange:return "OrientationChange";
+    case ImuEventType::Stationary:       return "Stationary";
+  }
+  return "?";
+}
+
 void onImuEvent(const dash::ImuEvent& e) {
   using dash::ImuEventType;
+  dash::portal().recordDiagEvent(imuEventName(e.type));
   switch (e.type) {
     case ImuEventType::Tap:
       dash::log::info("Main", "tap (mag=%.2fg)", e.magnitude);
@@ -93,12 +107,15 @@ void onTouchEvent(const dash::TouchEvent& e) {
   switch (e.type) {
     case dash::TouchEventType::Touch:
       dash::log::info("Main", "touch raw=%u", e.rawValue);
+      dash::portal().recordDiagEvent("Touch");
       break;
     case dash::TouchEventType::DoubleTouch:
-      dash::log::info("Main", "double-touch -> toggle session placeholder");
+      dash::log::info("Main", "double-touch");
+      dash::portal().recordDiagEvent("TouchDouble");
       break;
     case dash::TouchEventType::LongPress:
-      dash::log::info("Main", "long-press -> menu placeholder");
+      dash::log::info("Main", "long-press");
+      dash::portal().recordDiagEvent("TouchLong");
       break;
   }
 }

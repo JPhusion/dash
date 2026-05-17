@@ -59,7 +59,16 @@ void serveFile(WebServer& s, const String& path) {
 
 }  // namespace
 
-Portal::Portal() : lastClientMs_(0) {}
+Portal::Portal() : lastClientMs_(0), lastDiagEventMs_(0) {
+  lastDiagEvent_[0] = '\0';
+}
+
+void Portal::recordDiagEvent(const char* name) {
+  if (!name) return;
+  strncpy(lastDiagEvent_, name, sizeof(lastDiagEvent_) - 1);
+  lastDiagEvent_[sizeof(lastDiagEvent_) - 1] = '\0';
+  lastDiagEventMs_ = millis();
+}
 
 void Portal::begin() {
   WebServer* sv = wifiAp().server();
@@ -329,6 +338,17 @@ void Portal::begin() {
     sv->send(200, "application/json", "{\"ok\":true,\"rebooting\":true}");
     delay(500);
     ESP.restart();
+  });
+
+  // --- /api/diag-event (last imu/touch event seen, used by diag.html) ---
+  sv->on("/api/diag-event", HTTP_GET, [this, sv]() {
+    lastClientMs_ = millis();
+    char buf[96];
+    snprintf(buf, sizeof(buf),
+             "{\"last_event\":\"%s\",\"age_ms\":%lu}",
+             lastDiagEvent_,
+             (unsigned long)(millis() - lastDiagEventMs_));
+    sv->send(200, "application/json", buf);
   });
 
   // --- /api/easter-egg (konami / fun extras) ---

@@ -53,6 +53,11 @@ class Touch {
   uint16_t baseline() const { return baseline_; }
   uint16_t threshold() const { return threshold_; }
 
+  // Is the pad currently being touched? Polled by other modules (e.g. Imu
+  // ramps up tap sensitivity when this returns true so a finger contacting
+  // the pad while tapping the cube counts as a deliberate input).
+  bool isTouched() const { return wasTouched_; }
+
  private:
   static void taskTrampoline(void* arg);
   void loop();

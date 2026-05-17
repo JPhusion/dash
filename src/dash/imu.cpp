@@ -6,6 +6,7 @@
 
 #include "dash/log.h"
 #include "dash/pins.h"
+#include "dash/touch.h"
 
 namespace dash {
 
@@ -347,10 +348,16 @@ void Imu::sampleLoop() {
       //   2. Variance over the last ~160ms is also low (variance < shake/3) —
       //      proof there isn't a shake-burst around this spike.
       //   3. Refractory window of kTapRefractoryMs after a fire.
-      const bool prevQuiet      = (lastLinMag_ < tapThreshold_ * 0.4f);
+      //
+      // Cap-touch boost: when the user is touching the cap pad, drop the
+      // threshold to 60% so even a soft tap on the pad-side face registers.
+      float effThreshold = tapThreshold_;
+      if (touch().isTouched()) effThreshold *= 0.6f;
+
+      const bool prevQuiet      = (lastLinMag_ < effThreshold * 0.4f);
       const bool varianceQuiet  = (runningVar < shakeVariance_ * 0.33f);
       const bool inShakeWindow  = (nowMs - lastShakeMs_) < 500;
-      if (linMag > tapThreshold_ &&
+      if (linMag > effThreshold &&
           nowMs > tapCooldownUntilMs_ &&
           prevQuiet && varianceQuiet && !inShakeWindow) {
         tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;

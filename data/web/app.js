@@ -96,13 +96,31 @@ async function refreshStatus() {
     // Hero card always shows "Dash" (marketing). Personalise via user name.
     const userName = state.status.user_name || "";
     $("device-name").textContent = userName ? `Hi ${userName}` : "Dash";
-    const m = state.status.mood;
-    $("mood-text").textContent =
-      describeStatusLine(state.status);
+    $("mood-text").textContent = describeStatusLine(state.status);
+    // Footer + device info card.
+    const fw = state.status.firmware;
+    if ($("footer")) $("footer").textContent =
+      `firmware ${fw} · boot #${state.status.boot_count}`;
+    if ($("info-firmware"))  $("info-firmware").textContent  = fw;
+    if ($("info-bootcount")) $("info-bootcount").textContent = "#" + state.status.boot_count;
+    if ($("info-uptime"))    $("info-uptime").textContent    = formatUptime(state.status.uptime_ms);
+    if ($("info-ssid"))      $("info-ssid").textContent      = state.status.ssid || "—";
   } catch (e) {
     setPill("err", "offline");
     state.lastError = String(e);
   }
+}
+
+function formatUptime(ms) {
+  const sec = Math.floor(ms / 1000);
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (d) return `${d}d ${h}h ${m}m`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 function describeStatusLine(s) {
@@ -509,6 +527,41 @@ function bind() {
     if (buf.length > code.length) buf.shift();
     if (buf.join(",") === code.join(",")) { konami(); buf = []; }
   });
+
+  // Hidden developer mode: 8 quick taps on the "Tap to view diagnostics"
+  // settings row reveals the diagnostic card. Persists across reloads via
+  // localStorage so the user doesn't have to re-unlock each session.
+  const versionRow = $("info-version-row");
+  if (versionRow) {
+    let tapBuf = [];
+    versionRow.addEventListener("click", () => {
+      const now = Date.now();
+      tapBuf.push(now);
+      tapBuf = tapBuf.filter(t => now - t < 2500);
+      if (tapBuf.length >= 8) {
+        toast("👁  developer mode unlocked");
+        unlockDevMode();
+        tapBuf = [];
+      }
+    });
+  }
+  if (localStorage.getItem("dash.devmode") === "1") {
+    unlockDevMode();
+  }
+  const startDiag = $("btn-start-diag");
+  if (startDiag) startDiag.addEventListener("click", () => location.href = "/diag.html");
+  const hideDev = $("btn-hide-dev");
+  if (hideDev) hideDev.addEventListener("click", () => {
+    localStorage.removeItem("dash.devmode");
+    $("dev-mode-card").hidden = true;
+    toast("developer mode hidden");
+  });
+}
+
+function unlockDevMode() {
+  localStorage.setItem("dash.devmode", "1");
+  const card = $("dev-mode-card");
+  if (card) card.hidden = false;
 }
 
 async function konami() {

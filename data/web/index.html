@@ -197,9 +197,42 @@
     </div>
 
     <div class="settings-group">
+      <h3>About this Dash</h3>
+      <div class="settings-row">
+        <div class="label"><span class="name">Firmware</span></div>
+        <span id="info-firmware" class="subtle">—</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Boot count</span></div>
+        <span id="info-bootcount" class="subtle">—</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Uptime</span></div>
+        <span id="info-uptime" class="subtle">—</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Wi-Fi SSID</span></div>
+        <span id="info-ssid" class="subtle">—</span>
+      </div>
+      <div class="settings-row" id="info-version-row">
+        <div class="label"><span class="name">Tap to view diagnostics</span></div>
+        <span class="subtle">v1 · ESP32</span>
+      </div>
+    </div>
+
+    <div class="settings-group">
       <h3>Advanced</h3>
       <button class="btn danger" id="btn-reset-stats">Reset stats</button>
       <button class="btn danger" id="btn-factory-reset">Factory reset</button>
+    </div>
+
+    <!-- Hidden developer mode card — only revealed by 8 quick taps on the
+         version-row above. Stays hidden behind display:none until unlocked. -->
+    <div class="settings-group" id="dev-mode-card" hidden>
+      <h3>Developer mode</h3>
+      <p class="subtle">Run a hardware diagnostic to verify every peripheral. Walks you through tap, shake, touch, OLED and sound checks one by one.</p>
+      <button class="btn primary" id="btn-start-diag">Start diagnostic</button>
+      <button class="btn ghost" id="btn-hide-dev">Hide developer mode</button>
     </div>
 
     <p class="subtle muted" id="footer" style="text-align:center;">firmware —</p>
