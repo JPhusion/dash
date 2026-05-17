@@ -221,3 +221,39 @@ has been flashed + verified on the v1 prototype.
 ## Next steps once user is awake
 
 See `MORNING.md` at the repo root for a friendly walkthrough.
+
+---
+
+## Self-test status — 116 PASS / 0 FAIL
+
+Triggered via the **serial CLI** at 115200 baud: type `selftest`.
+
+| Section | Tests | Notes |
+|---|---|---|
+| StateMachine transitions | 10 | every DeviceState reachable |
+| Display: every EyeState 0..19 | 20 | render task applies each in ~60 ms |
+| Display: overlays | 6 | boot splash, progress 0/50/100, text, QR, clear, blink |
+| Character: Moods + react | 7 | Neutral..Playful + transient react() |
+| IMU event pipeline | 6 | Tap / DoubleTap / TripleTap / Shake / OrientationChange / Stationary, all via injectEvent() |
+| Touch event pipeline | 3 | Touch / DoubleTouch / LongPress |
+| Audio | 29 | all 28 .raw files non-zero + silent playback smoke |
+| Settings: NVS round-trip | 7 | every getter/setter + tap-sensitivity clamps |
+| Power: CPU profile switch | 2 | 240 MHz and 80 MHz verified |
+| Session lifecycle | 9 | start(label) → pause → resume → noteDistraction → stop |
+| Stats | 3 | append, summary, recentSessionsJson valid JSON |
+| WifiAp + Portal | 5 | AP up, SSID "Josh's Dash", IP 192.168.4.1 |
+| IdleManager API | 2 | sleepTimeoutSec round-trip, inhibitSleep toggle |
+| Character animations | 4 | session-start ~700 ms, wake ~590 ms, sleep ~1820 ms, greetBasedOnTime |
+| Games smoke | 2 | initial state None, lastScore accessor |
+| Heap stability | 1 | 50 synthetic events, **Δ = 0 bytes** |
+
+### Issues caught + fixed by the test run
+- **TripleTap / Shake were stalling for ~2 seconds** because main's
+  TripleTap handler ran `playSleepAnimation()` inline (1.8 s of
+  delay()-spaced eye states), blocking the IMU event listener chain.
+  All heavy event handlers (TripleTap, DoubleTap session toggle,
+  LongPress, face-flip-to-sleep) now spawn a one-shot FreeRTOS task and
+  return immediately.
+- UART serial output corrupts a byte or two across
+  `setCpuFrequencyMhz()` transitions (CPU change garbles in-flight
+  bytes). Cosmetic; counts are correct.
