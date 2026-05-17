@@ -228,10 +228,12 @@ void Display::renderTaskLoop() {
     Overlay overlay;
     uint8_t pct;
     char l1[24], l2[24], qr[128];
+    ArrowDir arrowDir;
     xSemaphoreTake(mutex_, portMAX_DELAY);
     want = targetEye_;
     overlay = overlay_;
     pct = progressPct_;
+    arrowDir = arrowDir_;
     memcpy(l1, text1_, sizeof(l1));
     memcpy(l2, text2_, sizeof(l2));
     memcpy(qr, qrPayload_, sizeof(qr));
@@ -241,9 +243,6 @@ void Display::renderTaskLoop() {
       applyEyeState(want);
       appliedEye_ = want;
     }
-
-    ArrowDir arrowDir;
-    xSemaphoreTake(mutex_, 0); arrowDir = arrowDir_; xSemaphoreGive(mutex_);
 
     // For overlays that hide the eyes we draw entirely ourselves. For
     // Progress we let the eye library draw, then overlay a bar.
