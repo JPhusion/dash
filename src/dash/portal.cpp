@@ -360,6 +360,14 @@ void Portal::begin() {
     sv->send(200, "application/json", "{\"ok\":true}");
   });
 
+  // --- /api/test-tone (volume preview, diagnostic speaker test) ---
+  sv->on("/api/test-tone", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    audio().setVolume(settings().audioVolume());
+    audio().play(sounds::kTestTone, dash::AudioFormat::Pcm8kHzMono8, true);
+    sv->send(200, "application/json", "{\"ok\":true}");
+  });
+
   // --- /api/easter-egg (konami / fun extras) ---
   sv->on("/api/easter-egg", HTTP_POST, [this, sv]() {
     lastClientMs_ = millis();

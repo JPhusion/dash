@@ -30,7 +30,9 @@ constexpr uint32_t kFaceHoldMs = 250;                      // hysteresis on face
 constexpr float kStationaryGyroThresh = 1.5f;             // deg/s
 constexpr float kStationaryAccelThresh = 0.05f;           // g (linear accel)
 constexpr uint32_t kStationaryHoldMs = 5000;
-constexpr uint32_t kTapRefractoryMs = 120;
+// Refractory dropped from 120ms → 50ms so the second tap of a fast
+// double-tap isn't silently dropped.
+constexpr uint32_t kTapRefractoryMs = 50;
 constexpr uint32_t kShakeRefractoryMs = 1500;
 
 Imu* g_singleton = nullptr;
@@ -338,28 +340,26 @@ void Imu::sampleLoop() {
       }
 
       // ---- Tap detection. A real finger tap has a distinctive signature:
-      // a brief quiet period followed by a sharp spike. Sustained motion
-      // (shake / hand-held / sliding the cube) keeps linMag elevated and
-      // therefore lacks the preceding quiet — those should NOT be taps.
+      // a brief quiet sample IMMEDIATELY before a sharp spike. Sustained
+      // motion (shaking, hand-held, sliding the cube) keeps linMag
+      // continuously elevated, so prevQuiet fails on those.
       //
-      // Rules:
-      //   1. Previous sample (10ms ago) was below tapThreshold * 0.4 — proof
-      //      we were actually quiet immediately before this spike.
-      //   2. Variance over the last ~160ms is also low (variance < shake/3) —
-      //      proof there isn't a shake-burst around this spike.
-      //   3. Refractory window of kTapRefractoryMs after a fire.
+      // The earlier varianceQuiet check turned out to be too aggressive —
+      // after one tap the variance stays elevated long enough to swallow
+      // the second tap of a deliberate double-tap. Replaced with a
+      // smaller inShakeWindow window (the explicit shake detector above
+      // already debounces sustained motion).
       //
       // Cap-touch boost: when the user is touching the cap pad, drop the
       // threshold to 60% so even a soft tap on the pad-side face registers.
       float effThreshold = tapThreshold_;
       if (touch().isTouched()) effThreshold *= 0.6f;
 
-      const bool prevQuiet      = (lastLinMag_ < effThreshold * 0.4f);
-      const bool varianceQuiet  = (runningVar < shakeVariance_ * 0.33f);
-      const bool inShakeWindow  = (nowMs - lastShakeMs_) < 500;
+      const bool prevQuiet     = (lastLinMag_ < effThreshold * 0.5f);
+      const bool inShakeWindow = (nowMs - lastShakeMs_) < 300;
       if (linMag > effThreshold &&
           nowMs > tapCooldownUntilMs_ &&
-          prevQuiet && varianceQuiet && !inShakeWindow) {
+          prevQuiet && !inShakeWindow) {
         tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
         if (tapCount_ == 0 || (nowMs - lastTapMs_) > tripleTapWindowMs_) {
           tapCount_ = 1;

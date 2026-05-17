@@ -58,6 +58,9 @@ void onImuEvent(const dash::ImuEvent& e) {
       break;
     case ImuEventType::DoubleTap:
       dash::log::info("Main", "double-tap");
+      // Distinct two-note chime so the user hears "double-tap detected"
+      // separately from the per-tap chirps.
+      dash::sounds::play(dash::sounds::kDoubleTapAck, true);
       // Double-tap toggles a session: starts one at the saved default length
       // if idle; ends the active one if mid-session. Only when fully
       // onboarded — first-boot users go through the portal wizard.
@@ -74,23 +77,35 @@ void onImuEvent(const dash::ImuEvent& e) {
       break;
     case ImuEventType::TripleTap:
       dash::log::info("Main", "triple-tap (deep-sleep gesture)");
-      dash::sounds::play(dash::sounds::kSleep);
+      // Distinct triple-tap ack first, then the longer sleep cue.
+      dash::sounds::play(dash::sounds::kTripleTapAck, true);
+      delay(280);
+      dash::sounds::play(dash::sounds::kSleep, true);
       dash::character().playSleepAnimation();
       dash::power().enterDeepSleep(0);
       break;
     case ImuEventType::Shake:
       dash::log::info("Main", "shake (mag=%.2f)", e.magnitude);
-      dash::character().react(dash::EyeState::Confused, 1200);
+      // Cute "whoa!" — the cube losing its balance. Dizzy / confused eyes
+      // for ~1.5s. Reaction is gated by the shake refractory in the IMU
+      // so it can't spam.
+      dash::sounds::play(dash::sounds::kWhoa, true);
+      dash::character().react(dash::EyeState::Confused, 1500);
       break;
     case ImuEventType::OrientationChange:
       dash::log::info("Main", "face: %s -> %s",
                       dash::faceToString(e.oldFace),
                       dash::faceToString(e.newFace));
-      // "Flipped to sleep" gesture: any orientation other than Up (the
-      // natural sitting-on-the-desk orientation) held for >3s triggers
-      // sleep. Robust to which body axis the IMU thinks is "down" — we
-      // just detect "not in the usual orientation" rather than guessing
-      // which face has the OLED.
+      // Curious "huh?" + surprised face whenever the cube gets rotated to
+      // a new face. Little robot noticing it's been moved. Skip during
+      // active sessions so it doesn't yelp every time you adjust the cube.
+      if (dash::stateMachine().state() != dash::DeviceState::InSession) {
+        dash::sounds::play(dash::sounds::kTilt, true);
+        dash::character().react(dash::EyeState::Surprised, 1000);
+      }
+      // "Flipped to sleep" gesture: any orientation other than Up held
+      // for >3s triggers sleep (robust to whichever body axis the IMU
+      // calls 'down' — we just detect 'not in the usual orientation').
       if (e.newFace != dash::Face::Up && e.newFace != dash::Face::Unknown) {
         g_faceDownSinceMs = millis();
       } else {

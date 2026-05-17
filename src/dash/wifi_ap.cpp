@@ -89,8 +89,8 @@ bool WifiAp::start() {
   xTaskCreatePinnedToCore(&WifiAp::httpTaskTrampoline, "http", 6144, this, 1,
                           &httpTask_, 0);
 
-  log::info(kTag, "AP up: %s @ %s (ch %u, 11 dBm)", ssid_.c_str(),
-            apIp_.toString().c_str(), kChannel);
+  log::info(kTag, "AP up: %s @ %s (ch %u, %.1f dBm)", ssid_.c_str(),
+            apIp_.toString().c_str(), kChannel, kTxPowerQdBm / 4.0f);
   return true;
 }
 

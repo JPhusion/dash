@@ -140,6 +140,57 @@ def session_complete() -> np.ndarray:
     )
 
 
+def whoa() -> np.ndarray:
+    """Cute 'whoa!' / 'wheee!' for when the cube gets shaken or bumped.
+    Quick rising-then-falling pitch sweep with a wobble — sounds like a
+    little robot losing its balance."""
+    return concat(
+        envelope(pitch_sweep(520, 880, 0.18, wave="triangle", amp=0.55), 0.005, 0.04),
+        envelope(pitch_sweep(880, 660, 0.18, wave="triangle", amp=0.5), 0.005, 0.06),
+    )
+
+
+def tilt() -> np.ndarray:
+    """A questioning 'huh?' for tilts and orientation changes — short
+    rising sweep so it sounds like a head-tilt sound effect."""
+    return envelope(pitch_sweep(420, 720, 0.14, wave="sine", amp=0.5), 0.005, 0.05)
+
+
+def boop() -> np.ndarray:
+    """Soft 'boop' for gentle bumps — friendlier than tap_ack."""
+    return envelope(sine(620, 0.06, amp=0.45), 0.003, 0.03)
+
+
+def test_tone() -> np.ndarray:
+    """A clearly audible 1.2-second tone used by the speaker-test step in
+    the diagnostic walkthrough. Two-note alternating pattern so it's
+    obviously synthetic and doesn't get confused with any ambient sound."""
+    a = envelope(sine(660, 0.30, amp=0.55), 0.005, 0.05)
+    b = envelope(sine(880, 0.30, amp=0.55), 0.005, 0.05)
+    return concat(a, silence(0.06), b, silence(0.06), a, silence(0.06), b)
+
+
+def double_tap_ack() -> np.ndarray:
+    """Distinct two-note chime fired when a double-tap is classified.
+    Pitches higher than tap_ack so the user can tell them apart."""
+    return concat(
+        envelope(sine(900, 0.05, amp=0.5), 0.002, 0.02),
+        envelope(sine(1200, 0.09, amp=0.5), 0.002, 0.04),
+    )
+
+
+def triple_tap_ack() -> np.ndarray:
+    """Three-note descending chime for triple-tap (deep-sleep gesture).
+    Distinct from the long sleep chime — this is the *acknowledgement*
+    that triple-tap was detected; sleep.raw plays after for the actual
+    going-to-sleep cue."""
+    return concat(
+        envelope(sine(1100, 0.06, amp=0.5), 0.002, 0.02),
+        envelope(sine(880, 0.06, amp=0.5), 0.002, 0.02),
+        envelope(sine(660, 0.12, amp=0.5), 0.002, 0.05),
+    )
+
+
 def tap_ack() -> np.ndarray:
     """Tiny click for tap acknowledgement."""
     return envelope(sine(1200, 0.04, amp=0.4), 0.002, 0.02)
@@ -268,6 +319,12 @@ SOUNDS: Dict[str, Callable[[], np.ndarray]] = {
     "tap_ack": tap_ack,
     "tap_ack_2": tap_ack_2,
     "tap_ack_3": tap_ack_3,
+    "double_tap_ack": double_tap_ack,
+    "triple_tap_ack": triple_tap_ack,
+    "test_tone": test_tone,
+    "whoa": whoa,
+    "tilt": tilt,
+    "boop": boop,
     "good_morning": good_morning,
     "milestone": milestone,
     "menu_blip": menu_blip,
@@ -284,27 +341,41 @@ SOUNDS: Dict[str, Callable[[], np.ndarray]] = {
 }
 
 
-def reverb(buf: np.ndarray, dry: float = 0.7, wet: float = 0.4) -> np.ndarray:
-    """Lightweight algorithmic reverb — a few decaying taps mixed with the
-    dry signal. Gives Dash's chimes a softer, more "real-room" tail without
-    sounding washed-out. Tuned for 8 kHz, mono.
+def lowpass(buf: np.ndarray, alpha: float = 0.35) -> np.ndarray:
+    """One-pole IIR lowpass — attenuates the high frequencies that make
+    8 kHz u8 PCM sound harsh. Smaller alpha = more rolloff. Used on the
+    reverb wet signal so the tail feels like a small room, not a series
+    of sharp echoes."""
+    out = np.empty_like(buf)
+    prev = 0.0
+    for i, x in enumerate(buf):
+        prev = alpha * x + (1.0 - alpha) * prev
+        out[i] = prev
+    return out
 
-    Tap delays were picked so they don't fall on integer multiples of one
-    another (which would produce ringing on tonal sounds); amplitudes decay
-    geometrically.
+
+def reverb(buf: np.ndarray, dry: float = 0.6, wet: float = 0.55) -> np.ndarray:
+    """Algorithmic plate-style reverb tuned for Dash's 8 kHz speaker.
+
+    Six exponentially-decaying taps with prime-ish delays (so they don't
+    line up rhythmically), each lowpass-filtered to take the bite out of
+    the wet signal. Result: a noticeable, soft tail without sounding
+    washy. Peak-normalised to 0.95 to leave headroom for the I2S amp.
     """
-    delays_ms = [27, 53, 89, 137]
-    amps      = [0.35, 0.24, 0.16, 0.10]
+    delays_ms = [23, 47, 79, 113, 167, 211]
+    amps      = [0.55, 0.42, 0.32, 0.24, 0.18, 0.13]
     n = len(buf)
-    # Output buffer is long enough to hold the longest tail.
-    tail = int(0.25 * SAMPLE_RATE)
+    tail = int(0.35 * SAMPLE_RATE)  # 350 ms reverb tail beyond input
     out = np.zeros(n + tail, dtype=np.float32)
     out[:n] = buf * dry
+    # Build the wet bus separately so we can lowpass-filter it once.
+    wet_bus = np.zeros(n + tail, dtype=np.float32)
     for d_ms, amp in zip(delays_ms, amps):
         d = int(d_ms * SAMPLE_RATE / 1000)
         if d < n + tail - 1:
-            out[d:d + n] += buf * (amp * wet)
-    # Re-normalise so we don't clip after summing wet copies.
+            wet_bus[d:d + n] += buf * amp
+    wet_bus = lowpass(wet_bus, alpha=0.32)
+    out += wet_bus * wet
     peak = float(np.max(np.abs(out)) or 1.0)
     if peak > 0.95:
         out *= 0.95 / peak
@@ -320,7 +391,8 @@ def to_u8_pcm(buf: np.ndarray) -> bytes:
 
 # Sounds that shouldn't get reverb — short clicks where a tail would smear
 # rapid repeats (e.g. tap_ack played on every cube tap, menu_blip etc).
-DRY_SOUNDS = {"tap_ack", "tap_ack_2", "tap_ack_3", "menu_blip"}
+DRY_SOUNDS = {"tap_ack", "tap_ack_2", "tap_ack_3",
+              "double_tap_ack", "triple_tap_ack", "menu_blip"}
 
 
 def main() -> None:
