@@ -103,19 +103,38 @@ void onImuEvent(const dash::ImuEvent& e) {
   }
 }
 
+// Cap-touch is treated as a redundant tap input — same UX as an IMU tap.
+// Touch        → tap_ack chirp + blink (just like onImuEvent::Tap).
+// DoubleTouch  → session toggle (just like onImuEvent::DoubleTap).
+// LongPress    → deep-sleep gesture (parallel to triple-tap).
 void onTouchEvent(const dash::TouchEvent& e) {
   switch (e.type) {
     case dash::TouchEventType::Touch:
-      dash::log::info("Main", "touch raw=%u", e.rawValue);
+      dash::log::info("Main", "touch raw=%u → tap", e.rawValue);
       dash::portal().recordDiagEvent("Touch");
+      dash::display().blink();
+      dash::sounds::playTapAck();
       break;
     case dash::TouchEventType::DoubleTouch:
-      dash::log::info("Main", "double-touch");
+      dash::log::info("Main", "double-touch → session toggle");
       dash::portal().recordDiagEvent("TouchDouble");
+      if (dash::settings().onboarded()) {
+        auto snap = dash::session().snapshot();
+        if (snap.active) {
+          dash::session().stop(false);
+        } else {
+          dash::session().start(dash::settings().sessionLengthMin());
+        }
+      } else {
+        dash::character().react(dash::EyeState::Surprised, 1200);
+      }
       break;
     case dash::TouchEventType::LongPress:
-      dash::log::info("Main", "long-press");
+      dash::log::info("Main", "long-press → sleep");
       dash::portal().recordDiagEvent("TouchLong");
+      dash::sounds::play(dash::sounds::kSleep);
+      dash::character().playSleepAnimation();
+      dash::power().enterDeepSleep(0);
       break;
   }
 }

@@ -12,7 +12,9 @@ namespace dash {
 namespace {
 constexpr const char* kTag = "WifiAp";
 constexpr uint8_t kChannel = 6;
-constexpr int8_t  kTxPowerQdBm = 44;  // 44/4 = 11 dBm
+constexpr int8_t  kTxPowerQdBm = 60;  // 60/4 = 15 dBm — was 11 dBm but the
+                                       // AP sometimes didn't appear in some
+                                       // phone Wi-Fi lists at the lower power.
 WifiAp* g_singleton = nullptr;
 }
 
