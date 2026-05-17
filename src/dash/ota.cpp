@@ -7,9 +7,13 @@
 #include <esp_wifi.h>
 #include <mbedtls/sha256.h>
 
+#include <ESPmDNS.h>
+
+#include "dash/audio.h"
 #include "dash/build_info.h"
 #include "dash/display.h"
 #include "dash/idle_manager.h"
+#include "dash/imu.h"
 #include "dash/log.h"
 #include "dash/power.h"
 #include "dash/settings.h"
@@ -67,16 +71,14 @@ bool Ota::ensureStation() {
   String pass = settings().homeWifiPassword();
   if (ssid.length() == 0) return false;
 
-  // Tear AP down so we can become STA. Channel won't carry over to home AP.
+  // Tear AP + mDNS down so we can become STA. mDNS was advertising on
+  // the AP interface; if it stays running it tries to multicast on the
+  // gone interface and the WiFi stack can spuriously disconnect.
+  MDNS.end();
   if (wifiAp().running()) wifiAp().stop();
 
   WiFi.mode(WIFI_STA);
-  // WiFi power-save OFF during OTA. Earlier this was MIN_MODEM which let
-  // the radio nap between beacons — combined with the idle manager's
-  // 80 MHz drowsy clock drop (now also suppressed in checkAndApply),
-  // the AP timed out our association mid-TLS handshake. NONE keeps the
-  // radio fully active for the duration.
-  esp_wifi_set_ps(WIFI_PS_NONE);
+  WiFi.setSleep(false);                  // disable WiFi sleep up-front
   WiFi.begin(ssid.c_str(), pass.c_str());
   log::info(kTag, "connecting to home WiFi %s", ssid.c_str());
 
@@ -88,7 +90,17 @@ bool Ota::ensureStation() {
     log::warn(kTag, "home WiFi connect timeout");
     return false;
   }
-  log::info(kTag, "home WiFi connected, IP=%s", WiFi.localIP().toString().c_str());
+  // Re-assert PS_NONE after association — IDF resets power-save state
+  // during association so a pre-begin call doesn't stick. Without this
+  // the AP times out our association mid-TLS handshake (ASSOC_LEAVE
+  // reason 8 ~1-2 s after the IP is assigned).
+  esp_wifi_set_ps(WIFI_PS_NONE);
+  // 500 ms settle window — DHCP/EAPOL handshake races finish, and TLS
+  // doesn't immediately compete with link-layer chatter.
+  delay(500);
+  log::info(kTag, "home WiFi connected, IP=%s rssi=%d ps=off heap=%u",
+            WiFi.localIP().toString().c_str(), WiFi.RSSI(),
+            (unsigned)ESP.getFreeHeap());
   return true;
 }
 
@@ -98,37 +110,93 @@ void Ota::teardownStation() {
 }
 
 bool Ota::fetchLatestTag(String& tagOut, String& assetUrl) {
-  WiFiClientSecure client;
-  client.setInsecure();   // GitHub uses Let's Encrypt; embedding the root CA
-                          // bundle is a future M12 hardening task.
-  HTTPClient http;
-  http.setUserAgent("dash-firmware");
-  if (!http.begin(client, kReleasesUrl)) return false;
-  int code = http.GET();
-  if (code != 200) {
-    log::warn(kTag, "GitHub releases HTTP %d", code);
+  // Up to 3 attempts at the HTTPS request, with a short delay between
+  // them. Most home routers will drop a STA that's silent during the
+  // TLS handshake (reason-8 ASSOC_LEAVE); on retry the cube re-associates
+  // and the second/third attempt usually goes through.
+  int code = 0;
+  String body;
+  for (int attempt = 1; attempt <= 3; ++attempt) {
+    if (WiFi.status() != WL_CONNECTED) {
+      log::warn(kTag, "WiFi dropped before HTTP — reconnecting (attempt %d)", attempt);
+      WiFi.reconnect();
+      uint32_t deadline = millis() + 10000;
+      while (WiFi.status() != WL_CONNECTED && millis() < deadline) delay(150);
+      if (WiFi.status() != WL_CONNECTED) {
+        log::warn(kTag, "reconnect failed");
+        continue;
+      }
+      esp_wifi_set_ps(WIFI_PS_NONE);
+      delay(300);
+    }
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setTimeout(15);                       // seconds; default is too short
+    HTTPClient http;
+    http.setUserAgent("dash-firmware");
+    http.setReuse(false);
+    http.setTimeout(15000);                      // ms
+    log::info(kTag, "GET %s heap=%u (attempt %d)",
+              kReleasesUrl, (unsigned)ESP.getFreeHeap(), attempt);
+    if (!http.begin(client, kReleasesUrl)) {
+      log::warn(kTag, "http.begin failed");
+      delay(800);
+      continue;
+    }
+    code = http.GET();
+    log::info(kTag, "HTTP %d", code);
+    if (code == 200) {
+      body = http.getString();
+      http.end();
+      log::info(kTag, "body len=%u", (unsigned)body.length());
+      // A truncated body (~few hundred bytes when AP drops mid-transfer)
+      // means the headers arrived but the JSON didn't — retry.
+      if (body.length() < 500) {
+        log::warn(kTag, "body too short, retrying");
+        code = 0;
+        delay(800);
+        continue;
+      }
+      break;
+    }
     http.end();
+    delay(800);
+  }
+  if (code != 200 || body.length() < 500) {
+    log::warn(kTag, "GitHub releases final HTTP %d len=%u",
+              code, (unsigned)body.length());
     return false;
   }
-  String body = http.getString();
-  http.end();
+  // body already captured + http already ended inside the retry loop.
 
   // Very light parse — just look for "tag_name" and the first firmware.bin asset URL.
   int t = body.indexOf("\"tag_name\":\"");
-  if (t < 0) return false;
+  if (t < 0) { log::warn(kTag, "parse: no tag_name (head=%s)", body.substring(0, 80).c_str()); return false; }
   int e = body.indexOf("\"", t + 12);
-  if (e < 0) return false;
+  if (e < 0) { log::warn(kTag, "parse: tag_name unterminated"); return false; }
   tagOut = body.substring(t + 12, e);
+  log::info(kTag, "parse: tag_name=%s", tagOut.c_str());
 
-  int asset = body.indexOf("firmware.bin");
-  if (asset < 0) return false;
-  // Walk backwards to find the most recent "browser_download_url":"<url-ending-in-firmware.bin>"
-  int urlStart = body.lastIndexOf("\"browser_download_url\":\"", asset);
-  if (urlStart < 0) return false;
+  // GitHub asset JSON puts browser_download_url AFTER the "name" field
+  // — there's only one asset per release in our case, so we search
+  // forward from the start of the body for the first occurrence.
+  // Sanity-check that the URL ends in firmware.bin so we don't pick up
+  // a stray URL pattern from elsewhere.
+  int urlStart = body.indexOf("\"browser_download_url\":\"");
+  if (urlStart < 0) {
+    log::warn(kTag, "parse: no browser_download_url in body (len=%u)",
+              (unsigned)body.length());
+    return false;
+  }
   urlStart += 24;
   int urlEnd = body.indexOf("\"", urlStart);
-  if (urlEnd < 0) return false;
+  if (urlEnd < 0) { log::warn(kTag, "parse: download_url unterminated"); return false; }
   assetUrl = body.substring(urlStart, urlEnd);
+  if (!assetUrl.endsWith("firmware.bin")) {
+    log::warn(kTag, "parse: asset_url=%s doesn't end in firmware.bin", assetUrl.c_str());
+    return false;
+  }
+  log::info(kTag, "parse: asset_url=%s", assetUrl.c_str());
   return true;
 }
 
