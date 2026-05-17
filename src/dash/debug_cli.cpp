@@ -4,6 +4,7 @@
 #include <esp_heap_caps.h>
 
 #include "dash/audio.h"
+#include "dash/calibration.h"
 #include "dash/character.h"
 #include "dash/display.h"
 #include "dash/games.h"
@@ -49,6 +50,7 @@ void printHelp() {
   Serial.println(F("heap                 — heap snapshot"));
   Serial.println(F("ap                   — wifi info"));
   Serial.println(F("selftest             — run the automated suite"));
+  Serial.println(F("calibrate            — gesture-data capture walkthrough"));
   Serial.println();
 }
 
@@ -336,7 +338,8 @@ void DebugCli::dispatch(const String& line) {
     return;
   }
 
-  if (cmd == "selftest") { runSelfTest(); return; }
+  if (cmd == "selftest")  { runSelfTest();    return; }
+  if (cmd == "calibrate") { runCalibration(); return; }
 
   Serial.printf("[CLI] unknown command: %s\n", cmd.c_str());
 }

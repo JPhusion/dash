@@ -220,10 +220,19 @@ void onImuEvent(const dash::ImuEvent& e) {
     case ImuEventType::Flick:
       dash::log::info("Main", "flick %s (mag=%.2fg)",
                       dash::faceToString(e.newFace), e.magnitude);
-      // Outside the games, a flick is a casual gesture — quick cute
-      // reaction. Inside the games, the games::begin() listener picks it
-      // up to satisfy bop-it prompts.
-      if (dash::games().current() == dash::GameId::None) {
+      // Flick "forward" (away from user) opens the games menu when in
+      // Idle — touchless alternative to long-press. The cap-pad
+      // long-press still works.
+      if (!menu::active &&
+          dash::stateMachine().state() == dash::DeviceState::Idle &&
+          (e.newFace == dash::Face::Front || e.newFace == dash::Face::Back)) {
+        menu::enter();
+        break;
+      }
+      // Inside a game, games::begin() listener picks the flick up to
+      // satisfy bop-it prompts — fall through to the ambient reaction
+      // only if there's no game running.
+      if (dash::games().current() == dash::GameId::None && !menu::active) {
         dash::sounds::play(dash::sounds::kBoop, true);
         dash::character().react(dash::EyeState::Surprised, 800);
       }

@@ -93,6 +93,12 @@ class Imu {
   // exercised without physical motion.
   void injectEvent(ImuEvent e);
 
+  // Clear the in-progress tap-chain state. Called when a state transition
+  // (game ends → Idle, session ends → Idle) means any taps that happened
+  // during the previous mode shouldn't carry over into a stale
+  // double / triple-tap classification.
+  void resetTapState();
+
  private:
   static void sampleTaskTrampoline(void* arg);
   static void eventTaskTrampoline(void* arg);

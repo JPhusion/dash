@@ -262,6 +262,16 @@ void Imu::injectEvent(ImuEvent e) {
   emit(e);
 }
 
+void Imu::resetTapState() {
+  tapCount_ = 0;
+  lastTapMs_ = 0;
+  firstTapMs_ = 0;
+  tapCooldownUntilMs_ = millis() + 250;   // small post-reset cooldown so
+                                          // a tap that arrived JUST before
+                                          // the reset doesn't immediately
+                                          // re-arm the chain.
+}
+
 void Imu::emit(ImuEvent e) {
   e.millis_ts = millis();
   // Non-blocking — drop oldest if full.

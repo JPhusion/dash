@@ -63,8 +63,12 @@ void Games::taskTrampoline(void* arg) { static_cast<Games*>(arg)->loop(); }
 void Games::loop() {
   if (current_ == GameId::Reaction) runReaction();
   else if (current_ == GameId::BopIt) runBopIt();
-  // Return to Idle.
+  // Return to Idle. Clear any in-progress tap-chain so a tap landed
+  // during the score-display screen doesn't get classified as the
+  // first tap of a double-tap once we're back in Idle (which would
+  // accidentally start a session).
   display().clearOverlay();
+  imu().resetTapState();
   character().setMood(Mood::Neutral);
   stateMachine().transitionTo(DeviceState::Idle);
   current_ = GameId::None;

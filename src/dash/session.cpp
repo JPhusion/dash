@@ -4,6 +4,7 @@
 #include "dash/character.h"
 #include "dash/display.h"
 #include "dash/idle_manager.h"
+#include "dash/imu.h"
 #include "dash/log.h"
 #include "dash/settings.h"
 #include "dash/sounds.h"
@@ -113,6 +114,10 @@ void Session::stop(bool celebrate) {
   // Clear the progress-bar overlay installed by tick() during the
   // session — without this the bar stays painted on the OLED after stop.
   display().clearOverlay();
+  // Reset the tap-chain so any tap landed in the last moment of the
+  // session doesn't roll into a double-tap that immediately starts a
+  // new one.
+  imu().resetTapState();
   if (celebrate) {
     // Milestone celebrations: total session count crosses round numbers gets
     // an extra-long heart-eye finale. The completed bit is what we just wrote
