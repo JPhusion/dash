@@ -9,7 +9,9 @@
 
 #include "dash/build_info.h"
 #include "dash/display.h"
+#include "dash/idle_manager.h"
 #include "dash/log.h"
+#include "dash/power.h"
 #include "dash/settings.h"
 #include "dash/wifi_ap.h"
 
@@ -69,7 +71,12 @@ bool Ota::ensureStation() {
   if (wifiAp().running()) wifiAp().stop();
 
   WiFi.mode(WIFI_STA);
-  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);   // power-save during OTA
+  // WiFi power-save OFF during OTA. Earlier this was MIN_MODEM which let
+  // the radio nap between beacons — combined with the idle manager's
+  // 80 MHz drowsy clock drop (now also suppressed in checkAndApply),
+  // the AP timed out our association mid-TLS handshake. NONE keeps the
+  // radio fully active for the duration.
+  esp_wifi_set_ps(WIFI_PS_NONE);
   WiFi.begin(ssid.c_str(), pass.c_str());
   log::info(kTag, "connecting to home WiFi %s", ssid.c_str());
 
@@ -223,6 +230,21 @@ OtaResult Ota::checkAndApply() {
     display().clearOverlay();
     return OtaResult::NoCredentials;
   }
+  // RAII guard: while OTA is running, keep the cube out of drowsy
+  // (idle manager would otherwise drop CPU to 80 MHz halfway through
+  // the TLS handshake and tear the WiFi association down) and pin CPU
+  // at full speed. Destructor restores defaults regardless of return path.
+  struct OtaScope {
+    OtaScope() {
+      idleManager().inhibitSleep(true);
+      power().setCpuProfile(CpuProfile::Performance);
+    }
+    ~OtaScope() {
+      power().setCpuProfile(CpuProfile::Performance);
+      idleManager().inhibitSleep(false);
+    }
+  } scope;
+
   display().showText("OTA", "Connecting…");
   if (!ensureStation()) {
     display().showText("OTA", "Connect fail");
