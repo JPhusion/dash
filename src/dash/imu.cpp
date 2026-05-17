@@ -330,7 +330,11 @@ void Imu::sampleLoop() {
       snap.pitch = pitch; snap.roll = roll; snap.yaw = yaw;
       snap.gravityX = grx; snap.gravityY = gry; snap.gravityZ = grz;
       snap.millis_ts = millis();
-      xSemaphoreTake(mutex_, 0);
+      // Block until the mutex is free — the readers (Imu::latest, the
+      // calibration capture loop) hold it for nanoseconds at most, so the
+      // sample task never stalls in practice. Was a non-blocking take +
+      // unconditional give → mutex-not-held assert under contention.
+      xSemaphoreTake(mutex_, portMAX_DELAY);
       latest_ = snap;
       xSemaphoreGive(mutex_);
 
