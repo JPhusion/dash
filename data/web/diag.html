@@ -7,6 +7,15 @@
   <title>Dash Diagnostics</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
+  <style>
+    /* Pass = green primary button. */
+    .btn.pass {
+      background: var(--success);
+      color: #00231b;
+      font-weight: 700;
+      border-color: var(--success);
+    }
+  </style>
 </head>
 <body>
 
@@ -19,12 +28,12 @@
   <article class="card hero">
     <div class="step-dots" id="dots" aria-hidden="true"></div>
     <h2 id="step-title">Hardware diagnostic</h2>
-    <p class="subtle" id="step-instruction">Walk through every peripheral one at a time. Tap the cube to begin.</p>
+    <p class="subtle" id="step-instruction">Walk through every peripheral one at a time.</p>
     <div id="step-status" class="subtle muted" style="min-height: 24px; margin-top: var(--s-3);">—</div>
     <div class="btn-row" style="margin-top: var(--s-4)">
-      <button class="btn ghost" id="btn-skip">Skip step</button>
-      <button class="btn ghost" id="btn-pass" hidden>Pass</button>
-      <button class="btn danger" id="btn-fail" hidden>Fail</button>
+      <button class="btn ghost" id="btn-skip">Skip</button>
+      <button class="btn pass" id="btn-pass" hidden>Yes</button>
+      <button class="btn danger" id="btn-fail" hidden>No</button>
     </div>
   </article>
 
@@ -42,31 +51,35 @@
 const $ = (id) => document.getElementById(id);
 
 const steps = [
-  { id: "boot",     name: "Boot OK",          auto: true,
-    instruction: "Confirm Dash is responding to the portal." },
-  { id: "imu",      name: "IMU readout",      auto: true,
-    instruction: "Reading orientation from the IMU..." },
-  { id: "tap",      name: "Tap detection",
+  { id: "boot",   name: "Boot OK", auto: true,
+    instruction: "Confirming Dash is reachable…" },
+  { id: "imu",    name: "IMU readout", auto: true,
+    instruction: "Reading orientation from the IMU…" },
+  { id: "tap",    name: "Tap detection",
     instruction: "Tap Dash once. The cube should blink and chirp." },
-  { id: "double",   name: "Double-tap",
-    instruction: "Double-tap Dash. Eyes should look surprised." },
-  { id: "shake",    name: "Shake detection",
-    instruction: "Give Dash a gentle side-to-side shake." },
-  { id: "orient",   name: "Orientation",
-    instruction: "Rotate Dash so a different face is up, then back." },
-  { id: "touch",    name: "Cap touch",
+  { id: "double", name: "Double-tap",
+    instruction: "Double-tap Dash. Eyes should react." },
+  { id: "shake",  name: "Shake detection",
+    instruction: "Give Dash a firm side-to-side shake." },
+  { id: "orient", name: "Orientation",
+    instruction: "Rotate Dash so a different face is up." },
+  { id: "touch",  name: "Cap touch",
     instruction: "Touch the cap-touch pad on the cube." },
-  { id: "oled",     name: "OLED",
+  { id: "oled",   name: "OLED",
     instruction: "Are the eyes drawing correctly on the OLED?",
     manual: true },
-  { id: "sound",    name: "Speaker",
-    instruction: "Did you hear the test tone?",
+  { id: "sound",  name: "Speaker",
+    instruction: "Do you hear the test tone playing?",
     manual: true,
-    onEnter: async () => { await api("/api/test-tone", { method: "POST" }); } },
+    repeat: true,                          // re-trigger /api/test-tone until answered
+    repeatPath: "/api/test-tone",
+    repeatEveryMs: 700 },
 ];
 
 let cur = 0;
 const results = {};
+let repeatTimer = null;
+let pollAbort = null;
 
 function renderDots() {
   $("dots").innerHTML = "";
@@ -79,32 +92,6 @@ function renderDots() {
   }
 }
 
-function renderStep() {
-  const step = steps[cur];
-  if (!step) {
-    $("step-title").textContent = "Done";
-    $("step-instruction").textContent =
-      "All steps complete. Tap exit to return.";
-    $("btn-skip").hidden = true;
-    $("btn-pass").hidden = true;
-    $("btn-fail").hidden = true;
-    return;
-  }
-  $("step-title").textContent = `Step ${cur+1}/${steps.length} · ${step.name}`;
-  $("step-instruction").textContent = step.instruction;
-  $("step-status").textContent = "...";
-  $("btn-skip").hidden = false;
-  $("btn-pass").hidden = !step.manual;
-  $("btn-fail").hidden = !step.manual;
-  renderDots();
-  if (step.onEnter) step.onEnter();
-  if (step.auto) {
-    autoRun(step);
-  } else if (!step.manual) {
-    pollStep(step);
-  }
-}
-
 async function api(path, opts = {}) {
   const r = await fetch(path, {
     headers: { "content-type": "application/json" }, ...opts,
@@ -112,6 +99,59 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error("HTTP " + r.status);
   const ct = r.headers.get("content-type") || "";
   return ct.includes("json") ? await r.json() : await r.text();
+}
+
+function clearRepeat() {
+  if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+}
+
+function abortPoll() {
+  if (pollAbort) { pollAbort.aborted = true; pollAbort = null; }
+}
+
+async function renderStep() {
+  clearRepeat();
+  abortPoll();
+  const step = steps[cur];
+  if (!step) {
+    // Mark diag done so the main page can show "last run".
+    localStorage.setItem("dash.lastDiag", String(Date.now()));
+    $("step-title").textContent = "Diagnostic complete";
+    $("step-instruction").textContent =
+      "All steps complete. Tap exit to return.";
+    $("btn-skip").hidden = true;
+    $("btn-pass").hidden = true;
+    $("btn-fail").hidden = true;
+    renderDots();
+    return;
+  }
+  $("step-title").textContent = `Step ${cur+1}/${steps.length} · ${step.name}`;
+  $("step-instruction").textContent = step.instruction;
+  $("step-status").textContent = "—";
+  $("btn-skip").hidden = false;
+  // Pass/Fail buttons only on manual steps; auto/polling steps don't need
+  // them because the cube confirms its own input.
+  $("btn-pass").hidden = !step.manual;
+  $("btn-fail").hidden = !step.manual;
+  renderDots();
+
+  // Repeat-trigger (e.g. test-tone replays every 700ms until user answers).
+  if (step.repeat && step.repeatPath) {
+    api(step.repeatPath, { method: "POST" }).catch(() => {});
+    repeatTimer = setInterval(() => {
+      api(step.repeatPath, { method: "POST" }).catch(() => {});
+    }, step.repeatEveryMs || 1000);
+  }
+
+  // Clear any stale last_event so we only match input that happens AFTER
+  // this step actually started.
+  try { await api("/api/diag-event", { method: "POST" }); } catch (e) {}
+
+  if (step.auto) {
+    autoRun(step);
+  } else if (!step.manual) {
+    pollStep(step);
+  }
 }
 
 async function autoRun(step) {
@@ -123,7 +163,7 @@ async function autoRun(step) {
     } catch (e) {
       record("boot", "fail", "no response from device");
     }
-    setTimeout(next, 1500);
+    setTimeout(next, 1200);
   } else if (step.id === "imu") {
     try {
       const s = await api("/api/status");
@@ -131,14 +171,15 @@ async function autoRun(step) {
     } catch (e) {
       record("imu", "fail", String(e));
     }
-    setTimeout(next, 1500);
+    setTimeout(next, 1200);
   }
 }
 
-// Poll /api/diag-event to see what IMU/touch event last fired.
 async function pollStep(step) {
+  const token = { aborted: false };
+  pollAbort = token;
   const deadline = Date.now() + 20000;
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && !token.aborted) {
     try {
       const s = await api("/api/diag-event");
       if (matched(step, s)) {
@@ -148,10 +189,12 @@ async function pollStep(step) {
       }
       $("step-status").textContent = `waiting for ${expected(step)}`;
     } catch (e) {}
-    await sleep(300);
+    await sleep(250);
   }
-  record(step.id, "fail", "timeout");
-  next();
+  if (!token.aborted) {
+    record(step.id, "fail", "timeout");
+    next();
+  }
 }
 
 function expected(step) {
@@ -181,16 +224,17 @@ function matched(step, ev) {
 function record(id, result, detail) {
   results[id] = result;
   const r = $("results");
-  if (r.querySelector(".empty")) r.innerHTML = "";
+  // First write — clear the "Nothing yet." placeholder.
   if (r.children.length === 1 && r.firstElementChild.classList.contains("subtle")) {
     r.innerHTML = "";
   }
   const row = document.createElement("div");
   row.className = "settings-row";
   const tone = result === "pass" ? "text-success" : "text-warn";
+  const stepInfo = steps.find(s => s.id === id);
   row.innerHTML =
     `<div class="label">
-       <span class="name">${steps.find(s => s.id === id).name}</span>
+       <span class="name">${stepInfo ? stepInfo.name : id}</span>
        ${detail ? `<span class="hint">${detail}</span>` : ""}
      </div>
      <span class="${tone}" style="font-weight:700">${result === "pass" ? "✓" : "✗"}</span>`;
@@ -202,24 +246,22 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 document.addEventListener("DOMContentLoaded", () => {
   $("btn-skip").addEventListener("click", () => {
+    clearRepeat();
     record(steps[cur].id, "fail", "skipped");
     next();
   });
   $("btn-pass").addEventListener("click", () => {
+    clearRepeat();
     record(steps[cur].id, "pass", "user confirmed");
     next();
   });
   $("btn-fail").addEventListener("click", () => {
+    clearRepeat();
     record(steps[cur].id, "fail", "user denied");
     next();
   });
   renderStep();
 });
-
-function toast(msg) {
-  const t = $("toast"); t.textContent = msg; t.classList.add("show");
-  setTimeout(() => t.classList.remove("show"), 2000);
-}
 </script>
 </body>
 </html>

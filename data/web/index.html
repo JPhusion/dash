@@ -45,7 +45,7 @@
           <button class="chip" data-min="90">90 min</button>
           <button class="chip" data-min="custom">custom</button>
         </div>
-        <input id="custom-min" type="number" min="5" max="240" hidden placeholder="minutes">
+        <input id="custom-min" type="number" min="1" max="240" hidden placeholder="minutes">
       </label>
       <button class="btn primary" id="btn-start-session">Start session</button>
       <button class="btn ghost" id="btn-group-study">Group study (beta)</button>
@@ -144,7 +144,7 @@
           <span class="name">Default length</span>
           <span class="hint">used when you tap Start without picking</span>
         </div>
-        <input id="cfg-session-min" type="number" min="5" max="240" style="width:96px;text-align:center;">
+        <input id="cfg-session-min" type="number" min="1" max="240" style="width:96px;text-align:center;">
       </div>
       <div class="settings-row">
         <div class="label">
@@ -215,8 +215,8 @@
         <span id="info-ssid" class="subtle">—</span>
       </div>
       <div class="settings-row" id="info-version-row">
-        <div class="label"><span class="name">Tap to view diagnostics</span></div>
-        <span class="subtle">v1 · ESP32</span>
+        <div class="label"><span class="name">Last diagnostic</span></div>
+        <span id="info-lastdiag" class="subtle">—</span>
       </div>
     </div>
 

@@ -350,6 +350,15 @@ void Portal::begin() {
              (unsigned long)(millis() - lastDiagEventMs_));
     sv->send(200, "application/json", buf);
   });
+  // POST clears the stored last_event so the diag page can wait for fresh
+  // input at each step boundary (otherwise a tap from before the step
+  // started would match immediately).
+  sv->on("/api/diag-event", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    lastDiagEvent_[0] = '\0';
+    lastDiagEventMs_ = millis();
+    sv->send(200, "application/json", "{\"ok\":true}");
+  });
 
   // --- /api/easter-egg (konami / fun extras) ---
   sv->on("/api/easter-egg", HTTP_POST, [this, sv]() {

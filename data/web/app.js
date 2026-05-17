@@ -105,10 +105,22 @@ async function refreshStatus() {
     if ($("info-bootcount")) $("info-bootcount").textContent = "#" + state.status.boot_count;
     if ($("info-uptime"))    $("info-uptime").textContent    = formatUptime(state.status.uptime_ms);
     if ($("info-ssid"))      $("info-ssid").textContent      = state.status.ssid || "—";
+    if ($("info-lastdiag"))  $("info-lastdiag").textContent  = formatLastDiag();
   } catch (e) {
     setPill("err", "offline");
     state.lastError = String(e);
   }
+}
+
+function formatLastDiag() {
+  const ts = parseInt(localStorage.getItem("dash.lastDiag") || "0", 10);
+  if (!ts) return "never";
+  const ago = Date.now() - ts;
+  const sec = Math.floor(ago / 1000);
+  if (sec < 60)    return "just now";
+  if (sec < 3600)  return `${Math.floor(sec/60)} min ago`;
+  if (sec < 86400) return `${Math.floor(sec/3600)} hr ago`;
+  return `${Math.floor(sec/86400)} d ago`;
 }
 
 function formatUptime(ms) {
