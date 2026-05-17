@@ -203,8 +203,13 @@ bool Ota::fetchLatestTag(String& tagOut, String& assetUrl) {
 bool Ota::downloadAndFlash(const String& url, const String& expectedHash) {
   WiFiClientSecure client;
   client.setInsecure();
+  client.setTimeout(30);
   HTTPClient http;
   http.setUserAgent("dash-firmware");
+  http.setTimeout(30000);
+  // GitHub's browser_download_url 302-redirects to objects.githubusercontent.com.
+  // Without follow-redirects, http.GET() returns 302 and the download fails.
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   if (!http.begin(client, url)) return false;
   static const char* kCollectHeaders[] = {"Content-Length"};
   http.collectHeaders(kCollectHeaders, 1);
