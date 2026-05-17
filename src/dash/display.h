@@ -47,6 +47,11 @@ enum class Overlay : uint8_t {
   QR,               // hides eyes, draws a QR code
   Big,              // hides eyes, prints one BIG word centred (game prompts)
   Inverted,         // big text but the whole screen inverted (reaction GO!)
+  Arrow,            // hides eyes, draws a large arrow (bop-it flick prompts)
+};
+
+enum class ArrowDir : uint8_t {
+  None, Left, Right, Up, Down,
 };
 
 class Display {
@@ -75,6 +80,10 @@ class Display {
   // text, which is the "GO!" cue in Reaction Time.
   void showBig(const char* word);
   void showInverted(const char* word);
+
+  // Large centered arrow (Bop It flick prompts). One of Left, Right,
+  // Up, Down — drawn as a filled triangle head + thick rectangular stem.
+  void showArrow(ArrowDir dir);
 
   void clearOverlay();
 
@@ -116,6 +125,7 @@ class Display {
   char     text2_[24];
   char     qrPayload_[128];
   bool     autoLook_;
+  ArrowDir arrowDir_;
 };
 
 // Singleton — there is only one OLED.

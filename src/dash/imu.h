@@ -41,6 +41,9 @@ enum class ImuEventType : uint8_t {
   Shake,
   OrientationChange,
   Stationary,            // device has been still long enough to recalibrate gyro
+  Flick,                 // directional flick — direction in newFace
+                         // (Left / Right / Front / Back). Tap = body-Z;
+                         // flicks happen in the body X/Y plane.
 };
 
 struct ImuEvent {

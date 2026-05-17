@@ -383,6 +383,31 @@ void Imu::sampleLoop() {
           (inTapChain || prevQuiet)) {
         fire = true;
       }
+
+      // Directional flick: a spike NOT along body-Z (so not a tap) but in
+      // the X/Y plane. We emit a Flick event with the dominant horizontal
+      // axis encoded in newFace (Left / Right / Front / Back). Same
+      // refractory and prevQuiet rules as tap so steady motion / shaking
+      // doesn't trigger.
+      if (!fire &&
+          linMag > effThreshold &&
+          nowMs > tapCooldownUntilMs_ &&
+          !inShakeWindow &&
+          !alongZ &&
+          prevQuiet) {
+        Face dir = Face::Unknown;
+        if (fabsf(lax) >= fabsf(lay)) {
+          dir = (lax > 0) ? Face::Right : Face::Left;
+        } else {
+          // +Y body usually means "back" — i.e., toward the user; -Y
+          // means "front" (away). These are arbitrary IMU-mount
+          // conventions; we'll flip in the game if it feels reversed.
+          dir = (lay > 0) ? Face::Back : Face::Front;
+        }
+        tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
+        emit({ImuEventType::Flick, dir, currentFace_, linMag, 0});
+      }
+
       if (fire) {
         tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
         if (tapCount_ == 0 || (nowMs - lastTapMs_) > tripleTapWindowMs_) {

@@ -71,7 +71,8 @@ Display::Display()
       appliedEye_(EyeState::Idle),
       overlay_(Overlay::None),
       progressPct_(0),
-      autoLook_(true) {
+      autoLook_(true),
+      arrowDir_(ArrowDir::None) {
   text1_[0] = '\0';
   text2_[0] = '\0';
   qrPayload_[0] = '\0';
@@ -176,6 +177,13 @@ void Display::showInverted(const char* word) {
   xSemaphoreGive(mutex_);
 }
 
+void Display::showArrow(ArrowDir dir) {
+  xSemaphoreTake(mutex_, portMAX_DELAY);
+  overlay_ = Overlay::Arrow;
+  arrowDir_ = dir;
+  xSemaphoreGive(mutex_);
+}
+
 void Display::clearOverlay() {
   xSemaphoreTake(mutex_, portMAX_DELAY);
   overlay_ = Overlay::None;
@@ -234,13 +242,16 @@ void Display::renderTaskLoop() {
       appliedEye_ = want;
     }
 
-    // For overlays that hide the eyes (Text, QR, BootSplash, Big,
-    // Inverted) we draw entirely ourselves. For Progress we let the eye
-    // library draw, then overlay a bar.
+    ArrowDir arrowDir;
+    xSemaphoreTake(mutex_, 0); arrowDir = arrowDir_; xSemaphoreGive(mutex_);
+
+    // For overlays that hide the eyes we draw entirely ourselves. For
+    // Progress we let the eye library draw, then overlay a bar.
     const bool isHidingOverlay =
         (overlay == Overlay::Text || overlay == Overlay::QR ||
          overlay == Overlay::BootSplash ||
-         overlay == Overlay::Big || overlay == Overlay::Inverted);
+         overlay == Overlay::Big || overlay == Overlay::Inverted ||
+         overlay == Overlay::Arrow);
 
     if (isHidingOverlay) {
       u8g2.clearBuffer();
@@ -259,12 +270,29 @@ void Display::renderTaskLoop() {
         u8g2.setCursor(20, 44);
         u8g2.print("Dash");
       } else if (overlay == Overlay::Big || overlay == Overlay::Inverted) {
-        u8g2.setFont(u8g2_font_logisoso24_tr);
         if (l1[0]) {
+          // Pick the biggest font that fits the string in the 128 px width.
+          // logisoso24 (24 px tall) is the marketing-sized cue; fall back to
+          // logisoso18 / helvB18 / helvB12 as the string gets longer so
+          // text never clips off the right edge.
+          struct FontChoice { const uint8_t* font; int baselineY; };
+          const FontChoice choices[] = {
+            { u8g2_font_logisoso24_tr, 46 },
+            { u8g2_font_logisoso18_tr, 42 },
+            { u8g2_font_helvB14_tr,    40 },
+            { u8g2_font_helvB12_tr,    38 },
+          };
+          int picked = 3;
+          for (int i = 0; i < 4; i++) {
+            u8g2.setFont(choices[i].font);
+            int w = u8g2.getStrWidth(l1);
+            if (w <= kScreenWidth - 4) { picked = i; break; }
+          }
+          u8g2.setFont(choices[picked].font);
           int w = u8g2.getStrWidth(l1);
           int x = (kScreenWidth - w) / 2;
           if (x < 2) x = 2;
-          u8g2.setCursor(x, 46);
+          u8g2.setCursor(x, choices[picked].baselineY);
           u8g2.print(l1);
         }
       } else if (overlay == Overlay::Text) {
@@ -278,6 +306,41 @@ void Display::renderTaskLoop() {
           int w = u8g2.getStrWidth(l2);
           u8g2.setCursor((kScreenWidth - w) / 2, 50);
           u8g2.print(l2);
+        }
+      } else if (overlay == Overlay::Arrow) {
+        // Filled triangle head + thick rectangular stem, centered on the
+        // OLED (cx=64, cy=32). Roughly 48 px wide × 40 px tall — fills
+        // most of the screen so it's readable across the desk.
+        const int cx = kScreenWidth / 2;
+        const int cy = kScreenHeight / 2;
+        const int half = 22;           // half-size of the arrow body
+        const int stemH = 12;
+        switch (arrowDir) {
+          case ArrowDir::Up:
+            u8g2.drawTriangle(cx, cy - half,        // tip
+                              cx - half, cy,        // bottom-left
+                              cx + half, cy);       // bottom-right
+            u8g2.drawBox(cx - stemH/2, cy, stemH, half);    // stem below tip
+            break;
+          case ArrowDir::Down:
+            u8g2.drawTriangle(cx, cy + half,
+                              cx - half, cy,
+                              cx + half, cy);
+            u8g2.drawBox(cx - stemH/2, cy - half, stemH, half);
+            break;
+          case ArrowDir::Left:
+            u8g2.drawTriangle(cx - half, cy,
+                              cx, cy - half,
+                              cx, cy + half);
+            u8g2.drawBox(cx, cy - stemH/2, half, stemH);
+            break;
+          case ArrowDir::Right:
+            u8g2.drawTriangle(cx + half, cy,
+                              cx, cy - half,
+                              cx, cy + half);
+            u8g2.drawBox(cx - half, cy - stemH/2, half, stemH);
+            break;
+          default: break;
         }
       } else {
         // Simple ASCII rendering for QR until we add a real QR code lib.

@@ -145,6 +145,7 @@ const char* imuEventName(dash::ImuEventType t) {
     case ImuEventType::Shake:            return "Shake";
     case ImuEventType::OrientationChange:return "OrientationChange";
     case ImuEventType::Stationary:       return "Stationary";
+    case ImuEventType::Flick:            return "Flick";
   }
   return "?";
 }
@@ -215,6 +216,17 @@ void onImuEvent(const dash::ImuEvent& e) {
       break;
     case ImuEventType::Stationary:
       dash::log::info("Main", "stationary; gyro bias updated");
+      break;
+    case ImuEventType::Flick:
+      dash::log::info("Main", "flick %s (mag=%.2fg)",
+                      dash::faceToString(e.newFace), e.magnitude);
+      // Outside the games, a flick is a casual gesture — quick cute
+      // reaction. Inside the games, the games::begin() listener picks it
+      // up to satisfy bop-it prompts.
+      if (dash::games().current() == dash::GameId::None) {
+        dash::sounds::play(dash::sounds::kBoop, true);
+        dash::character().react(dash::EyeState::Surprised, 800);
+      }
       break;
   }
 }

@@ -14,15 +14,14 @@ namespace {
 constexpr const char* kTag = "Games";
 Games* g_singleton = nullptr;
 
-const char* actionName(uint8_t a) {
-  switch (a) {
-    case 0: return "TAP!";
-    case 1: return "SHAKE!";
-    case 2: return "UP!";
-    case 3: return "DOWN!";
-  }
-  return "";
-}
+// Bop It actions:
+//   0 = TAP   (tap on top of cube)
+//   1 = ←    (flick cube left)
+//   2 = →    (flick cube right)
+//   3 = ↑    (flick cube up / away from user)
+//   4 = ↓    (flick cube down / toward user)
+constexpr uint8_t kActionCount = 5;
+
 }  // namespace
 
 Games::Games()
@@ -32,11 +31,16 @@ Games::Games()
 void Games::begin() {
   imu().onEvent([this](const ImuEvent& e) {
     if (current_ == GameId::None) return;
-    if (e.type == ImuEventType::Tap && expectedAction_ == 0)            actionConsumed_ = true;
-    else if (e.type == ImuEventType::Shake && expectedAction_ == 1)     actionConsumed_ = true;
-    else if (e.type == ImuEventType::OrientationChange) {
-      if (expectedAction_ == 2 && e.newFace == Face::Up)   actionConsumed_ = true;
-      if (expectedAction_ == 3 && e.newFace == Face::Down) actionConsumed_ = true;
+    // Match the right kind of event for whichever prompt is currently
+    // displayed. Tap is body-Z; flicks are X/Y with the direction in
+    // newFace (Left/Right/Front/Back).
+    if (e.type == ImuEventType::Tap && expectedAction_ == 0) {
+      actionConsumed_ = true;
+    } else if (e.type == ImuEventType::Flick) {
+      if (expectedAction_ == 1 && e.newFace == Face::Left)  actionConsumed_ = true;
+      if (expectedAction_ == 2 && e.newFace == Face::Right) actionConsumed_ = true;
+      if (expectedAction_ == 3 && e.newFace == Face::Front) actionConsumed_ = true;  // "↑"
+      if (expectedAction_ == 4 && e.newFace == Face::Back)  actionConsumed_ = true;  // "↓"
     }
   });
 }
@@ -118,13 +122,19 @@ void Games::runBopIt() {
   uint32_t score = 0;
   uint32_t window = 1800;
   while (current_ != GameId::None && score < 20) {
-    uint8_t action = (uint8_t)(esp_random() % 4);
+    uint8_t action = (uint8_t)(esp_random() % kActionCount);
     expectedAction_ = action;
     actionConsumed_ = false;
     actionMs_ = millis();
-    // Each prompt is full-screen and big — the user is reading the cube
-    // from across the desk while reacting fast.
-    display().showBig(actionName(action));
+    // Each prompt is a full-screen visual cue. Tap uses big text "TAP!";
+    // the four directional flicks use a large drawn arrow.
+    switch (action) {
+      case 0: display().showBig("TAP!");           break;
+      case 1: display().showArrow(ArrowDir::Left); break;
+      case 2: display().showArrow(ArrowDir::Right);break;
+      case 3: display().showArrow(ArrowDir::Up);   break;
+      case 4: display().showArrow(ArrowDir::Down); break;
+    }
     audio().play(sounds::kMenuBlip);
 
     uint32_t deadline = millis() + window;
