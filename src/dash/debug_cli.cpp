@@ -11,6 +11,7 @@
 #include "dash/idle_manager.h"
 #include "dash/imu.h"
 #include "dash/log.h"
+#include "dash/ota.h"
 #include "dash/power.h"
 #include "dash/self_test.h"
 #include "dash/session.h"
@@ -75,6 +76,7 @@ void printHelp() {
   Serial.println(F("selftest             — run the automated suite"));
   Serial.println(F("calibrate            — gesture-data capture walkthrough"));
   Serial.println(F("orient               — orientation (gravity vector) walkthrough"));
+  Serial.println(F("ota | ota tag        — run OTA check+apply | fetch latest tag only"));
   Serial.println();
 }
 
@@ -431,6 +433,19 @@ void DebugCli::dispatch(const String& line) {
   if (cmd == "selftest")  { runSelfTest();    return; }
   if (cmd == "calibrate") { runCalibration(); return; }
   if (cmd == "orient")    { runOrientCalibration(); return; }
+  if (cmd == "ota") {
+    if (n >= 2 && t[1] == "tag") {
+      Serial.println("OTA: fetching latest tag (no install)…");
+      String tag = ota().latestRemoteTag();
+      if (tag.length()) Serial.printf("latest: %s\n", tag.c_str());
+      else              Serial.println("latest: <fetch failed>");
+      return;
+    }
+    Serial.println("OTA: checkAndApply() starting — will reboot on success");
+    OtaResult r = ota().checkAndApply();
+    Serial.printf("OTA result: %s\n", otaResultString(r));
+    return;
+  }
 
   Serial.printf("[CLI] unknown command: %s\n", cmd.c_str());
 }

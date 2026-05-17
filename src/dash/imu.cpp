@@ -320,7 +320,15 @@ void Imu::enableWakeOnMotion(uint16_t thresholdMg) {
   writeMpu(kRegSignalPathReset, 0x07);   // gyro+accel+temp signal reset
   delay(2);
   writeMpu(kRegAccelConfig,   0x00);
-  writeMpu(kRegIntPinCfg,     0xA0);     // INT_LEVEL=0 (active-high), latch, clear on any read
+  // INT_PIN_CFG bits:
+  //   7: INT_LEVEL    0 = active HIGH (we want this — GPIO 19 wakes on HIGH)
+  //   6: INT_OPEN     0 = push-pull
+  //   5: LATCH_INT_EN 1 = stay asserted until cleared (vs 50 us pulse)
+  //   4: INT_RD_CLEAR 1 = any read clears the latch
+  // → 0b0011_0000 = 0x30. Previously 0xA0 set INT_LEVEL=1 (active LOW),
+  //   which meant the pin idled HIGH and the GPIO-HIGH wake fired
+  //   immediately on every sleep entry — so the cube never really slept.
+  writeMpu(kRegIntPinCfg,     0x30);
   writeMpu(kRegIntEnable,     0x40);     // MOT_EN
   delay(2);
   writeMpu(kRegAccelConfig,   0x07);     // DHPF = Hold
@@ -331,7 +339,10 @@ void Imu::enableWakeOnMotion(uint16_t thresholdMg) {
   if (thrReg > 255) thrReg = 255;
   writeMpu(kRegMotThr, (uint8_t)thrReg);
   writeMpu(kRegMotDur, 1);                // 1 ms minimum
-  writeMpu(kRegPwrMgmt2, 0x07);           // gyro X/Y/Z standby; accel on
+  // PWR_MGMT_2: LP_WAKE_CTRL=11 (40 Hz wake rate) + gyro X/Y/Z standby.
+  // 0xC7 = 0b1100_0111. Previously 0x07 used LP_WAKE_CTRL=00 (1.25 Hz)
+  // which sampled motion too slowly to catch a deliberate shake.
+  writeMpu(kRegPwrMgmt2, 0xC7);
   writeMpu(kRegPwrMgmt1, 0x28);           // CYCLE=1 + TEMP_DIS
 
   log::info(kTag, "WoM enabled, threshold ~%umg", (unsigned)(thrReg * 2));
