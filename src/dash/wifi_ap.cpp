@@ -86,7 +86,12 @@ bool WifiAp::start() {
   running_ = true;
   xTaskCreatePinnedToCore(&WifiAp::dnsTaskTrampoline, "dns", 4096, this, 1,
                           &dnsTask_, 0);
-  xTaskCreatePinnedToCore(&WifiAp::httpTaskTrampoline, "http", 6144, this, 1,
+  // 16 KB stack — portal handlers run synchronously on this task and
+  // /api/ota/check eventually calls ota().checkAndApply() which needs
+  // ~10 KB of stack for the TLS handshake + HTTPClient + Update.write
+  // buffers. 6 KB was tripping the canary mid-handshake (same root
+  // cause as the debug-cli task earlier).
+  xTaskCreatePinnedToCore(&WifiAp::httpTaskTrampoline, "http", 16384, this, 1,
                           &httpTask_, 0);
 
   log::info(kTag, "AP up: %s @ %s (ch %u, %.1f dBm)", ssid_.c_str(),
