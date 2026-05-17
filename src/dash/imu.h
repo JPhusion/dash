@@ -41,9 +41,17 @@ enum class ImuEventType : uint8_t {
   Shake,
   OrientationChange,
   Stationary,            // device has been still long enough to recalibrate gyro
-  Flick,                 // directional flick — direction in newFace
-                         // (Left / Right / Front / Back). Tap = body-Z;
-                         // flicks happen in the body X/Y plane.
+  Spin,                  // cube spun around the vertical axis while flat
+                         // on a face. newFace = Face::Left or Face::Right
+                         // (signed by sign of integrated yaw); magnitude =
+                         // accumulated degrees of rotation. Tilt directions
+                         // are sample-relative, so the user-facing meaning
+                         // of left/right is calibrated in main.cpp.
+  Tilt,                  // cube tilted partway from a stable face and
+                         // returned without changing face.
+                         // newFace = Face::Left or Face::Right;
+                         // oldFace = the face the cube was resting on.
+                         // magnitude = peak deviation (radians).
 };
 
 struct ImuEvent {
@@ -137,6 +145,13 @@ class Imu {
   uint32_t firstTapMs_;
   uint32_t tapCooldownUntilMs_;
   float lastLinMag_;            // previous-sample magnitude for quiet-before-spike test
+  // Deferred tap commit: spikes start as "pending". After a short
+  // confirmation window we either emit the Tap (variance stayed low —
+  // genuine transient) or drop it (variance climbed — it was actually
+  // part of a sustained shake).
+  uint32_t tapPendingMs_ = 0;
+  float    tapPendingMag_ = 0;
+  Face     tapPendingFace_ = Face::Unknown;
 
   // Shake state.
   float shakeVariance_;
@@ -148,6 +163,29 @@ class Imu {
   Face currentFace_;
   Face candidateFace_;
   uint32_t candidateFaceSinceMs_;
+
+  // Spin detection: integrate yaw rate (gz, deg/s) over time. When the
+  // cube is flat on a face and accumulates > kSpinFireDeg of rotation,
+  // emit a Spin event with direction encoded in newFace. Decays toward
+  // zero when below the noise floor so slow continuous rotation still
+  // counts, but a brief drift doesn't bank toward a future spike.
+  float spinAccumDeg_;
+  uint32_t spinLastSampleMs_;
+  uint32_t lastSpinFiredMs_;
+
+  // Tilt detection: when the cube is stable on a face, snapshot the
+  // gravity vector. While that face stays current, compute the deviation
+  // of the live gravity vector from the snapshot. Cross a threshold +
+  // return to neutral without changing face → emit Tilt.
+  bool tiltSnapshotValid_;
+  float tiltRefGx_, tiltRefGy_, tiltRefGz_;   // gravity at rest on face
+  bool tiltInProgress_;
+  uint32_t tiltStartMs_;
+  uint32_t lastTiltFiredMs_;
+  // Peak deviation vector during the tilt — used to decide direction
+  // (Left vs Right) when the tilt returns to neutral.
+  float tiltPeakDevX_, tiltPeakDevY_, tiltPeakDevZ_;
+  float tiltPeakMagnitude_;
 
   // Stationary detection for opportunistic gyro recal.
   uint32_t stationarySinceMs_;

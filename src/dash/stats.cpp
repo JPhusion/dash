@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "dash/log.h"
+#include "dash/settings.h"
 
 namespace dash {
 
@@ -154,6 +155,45 @@ StatsSummary Stats::summary() {
     s.streakDays = streak;
   }
   return s;
+}
+
+uint32_t Stats::todayFocusedSec(int16_t tzOffsetMin) {
+  // Use the last phone-synced unix as "now" — it's what session
+  // records also stamp themselves with (see Session::stop), so this
+  // keeps records from the same calendar day in the same bucket
+  // even though we don't run a real RTC.
+  uint32_t nowUnix = settings().lastUnix();
+  if (nowUnix < 86400UL) return 0;   // clock not yet synced
+  // Local-day bucket: shift by tz minutes, then floor to 24h.
+  int32_t shift = (int32_t)tzOffsetMin * 60;
+  uint32_t todayBucket = (uint32_t)(((int64_t)nowUnix + shift) / 86400);
+
+  File f = LittleFS.open(kPath, "r");
+  if (!f) return 0;
+  uint32_t total = 0;
+  String line;
+  line.reserve(160);
+  while (f.available()) {
+    char c = f.read();
+    if (c == '\n') {
+      int idx;
+      uint32_t startedUnix = 0;
+      uint16_t actualSec = 0;
+      idx = line.indexOf("\"u\":");
+      if (idx >= 0) startedUnix = strtoul(line.c_str() + idx + 4, nullptr, 10);
+      idx = line.indexOf("\"as\":");
+      if (idx >= 0) actualSec = (uint16_t)strtoul(line.c_str() + idx + 5, nullptr, 10);
+      if (startedUnix > 0) {
+        uint32_t b = (uint32_t)(((int64_t)startedUnix + shift) / 86400);
+        if (b == todayBucket) total += actualSec;
+      }
+      line = "";
+    } else if (line.length() < 200) {
+      line += c;
+    }
+  }
+  f.close();
+  return total;
 }
 
 size_t Stats::recentSessionsJson(char* buf, size_t cap, uint8_t limit) {

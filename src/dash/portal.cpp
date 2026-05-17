@@ -210,11 +210,14 @@ void Portal::begin() {
   sv->on("/api/session", HTTP_GET, [this, sv]() {
     lastClientMs_ = millis();
     auto snap = session().snapshot();
-    char buf[320];
+    char buf[384];
     uint32_t elapsed_s = 0;
+    uint32_t remaining_s = 0;
+    uint32_t total_s = (uint32_t)snap.targetMin * 60u;
     if (snap.active) {
       uint32_t elapsedMs = (millis() - snap.startedAtMs) - snap.pausedMs;
       elapsed_s = elapsedMs / 1000UL;
+      remaining_s = (elapsed_s >= total_s) ? 0 : (total_s - elapsed_s);
     }
     // Escape user-supplied label minimally (replace " with ' for json).
     char safeLabel[40];
@@ -225,13 +228,23 @@ void Portal::begin() {
       safeLabel[k++] = c;
     }
     safeLabel[k] = '\0';
+    // Include today's accumulated focus time so the portal can show
+    // it alongside the countdown without a second roundtrip. Add the
+    // currently-running session's elapsed on top so the number ticks
+    // up in real time during the session.
+    uint32_t today_sec =
+        stats().todayFocusedSec(settings().tzOffsetMin());
+    if (snap.active) today_sec += elapsed_s;
     snprintf(buf, sizeof(buf),
              "{\"active\":%s,\"state\":%d,\"elapsed_s\":%u,"
-             "\"total_s\":%u,\"distractions\":%u,\"label\":\"%s\"}",
+             "\"remaining_s\":%u,\"total_s\":%u,\"distractions\":%u,"
+             "\"today_sec\":%u,\"label\":\"%s\"}",
              snap.active ? "true" : "false", (int)snap.state,
              (unsigned)elapsed_s,
-             (unsigned)snap.targetMin * 60u,
+             (unsigned)remaining_s,
+             (unsigned)total_s,
              (unsigned)snap.distractions,
+             (unsigned)today_sec,
              safeLabel);
     sv->send(200, "application/json", buf);
   });
@@ -335,6 +348,15 @@ void Portal::begin() {
     p.clear();
     p.end();
     LittleFS.remove("/stats/sessions.ndjson");
+    sv->send(200, "application/json", "{\"ok\":true,\"rebooting\":true}");
+    delay(500);
+    ESP.restart();
+  });
+
+  // --- /api/reboot ---  Soft reboot only; no NVS wipe.
+  sv->on("/api/reboot", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    log::info(kTag, "reboot requested");
     sv->send(200, "application/json", "{\"ok\":true,\"rebooting\":true}");
     delay(500);
     ESP.restart();

@@ -206,11 +206,23 @@ function renderSession() {
   $("session-running").hidden = false;
   const elapsed = s.elapsed_s | 0;
   const total = s.total_s | 0;
+  // remaining_s is sent by firmware; fall back to client-side math for
+  // forward compatibility with older firmware that doesn't include it.
+  const remaining = (typeof s.remaining_s === "number")
+    ? (s.remaining_s | 0)
+    : Math.max(0, total - elapsed);
+  const today = (s.today_sec | 0);
   const label = (s.label || "").trim();
   $("running-label").textContent = label || "In session";
-  $("timer").textContent = formatTimer(elapsed);
+  // Big primary = countdown (time remaining). Smaller line = elapsed
+  // count-up. Third line = total focus time today.
+  $("timer").textContent = formatTimer(remaining);
+  const elEl = $("timer-elapsed");
+  if (elEl) elEl.textContent = `elapsed ${formatTimer(elapsed)}`;
   $("timer-sub").textContent =
     `of ${formatTimer(total)} · ${s.distractions} distraction${s.distractions === 1 ? "" : "s"}`;
+  const todayEl = $("timer-today");
+  if (todayEl) todayEl.textContent = `today ${formatHM(today)}`;
   const pct = total > 0 ? Math.min(100, (elapsed / total) * 100) : 0;
   $("progress-fill").style.width = `${pct}%`;
   const paused = s.state === 2;
@@ -225,6 +237,13 @@ function formatTimer(s) {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+}
+
+// HH:MM-style human format for "today total" (e.g. "1h 23m" or "0h 05m").
+function formatHM(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}h ${m.toString().padStart(2, "0")}m`;
 }
 
 /* =========================================================================
@@ -592,6 +611,17 @@ function bind() {
   }
   const startDiag = $("btn-start-diag");
   if (startDiag) startDiag.addEventListener("click", () => location.href = "/diag.html");
+  const rebootBtn = $("btn-reboot");
+  if (rebootBtn) rebootBtn.addEventListener("click", async () => {
+    if (!confirm("Reboot the device? Your AP will drop for ~5 seconds.")) return;
+    try {
+      await api("/api/reboot", { method: "POST" });
+      toast("rebooting…");
+    } catch (e) {
+      // The reboot may kill the connection mid-response — treat that as success.
+      toast("rebooting…");
+    }
+  });
   const hideDev = $("btn-hide-dev");
   if (hideDev) hideDev.addEventListener("click", () => {
     localStorage.removeItem("dash.devmode");

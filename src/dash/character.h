@@ -58,6 +58,21 @@ class Character {
   // Fire a brief reaction (overrides resting state for hold_ms then returns).
   void react(EyeState state, uint32_t hold_ms = 1200);
 
+  // Spinning-eye "dizzy" animation — drives lookAt() in a small circle for
+  // ~1.4s, then settles into the Dizzy eye state for another hold_ms,
+  // then returns to the resting state. Spawned on its own task so the
+  // caller doesn't block.
+  void playDizzyAnimation(uint32_t hold_ms = 1500);
+
+  // Aim the eyes in the direction of the current gravity vector. Reads
+  // imu().latest() once, projects the gravity vector onto the screen
+  // plane, calls display().lookAt(x, y). The projection assumes the
+  // screen-forward (neutral) face — when the cube is in some other
+  // resting orientation, this points the eyes toward where the floor
+  // is from the cube's perspective. Pass returnMs > 0 to schedule a
+  // return to center (lookAt 0,0) after that long.
+  void lookAtGravity(uint32_t returnMs = 0);
+
   // Set the underlying mood — modulates the resting eye state and idle quirks.
   void setMood(Mood m);
   Mood mood() const { return mood_; }

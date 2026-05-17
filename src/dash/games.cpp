@@ -14,17 +14,18 @@ namespace {
 constexpr const char* kTag = "Games";
 Games* g_singleton = nullptr;
 
-// Bop It actions tuned to what this cube's IMU mounting reliably
-// detects (per calibration data):
-//   0 = TAP    (tap on top of cube — body-Z impulse)
-//   1 = ←     (flick the cube to your left  → +Y body)
-//   2 = →     (flick the cube to your right → -Y body)
-//   3 = SHAKE (any vigorous motion — variance trigger)
+// Bop It actions — 3 prompts that reliably distinguish on this cube's
+// IMU (per second calibration round):
+//   0 = TAP    body-Z dominant (laz ~ +0.9g on a clean tap)
+//   1 = FLICK  -Y dominant (lay ~ -0.4g on any sideways jerk)
+//   2 = SHAKE  sustained +Y motion at high magnitude (linMag ~ 3g)
 //
-// Up / down flicks are intentionally omitted: both produce a -Z
-// signature because the "bounce back" mirrors the initial push,
-// making them indistinguishable from peak data alone.
-constexpr uint8_t kActionCount = 4;
+// We previously had left/right as separate prompts but the user's
+// physical flick-left and flick-right both registered as -Y dominant
+// — the IMU was capturing the deceleration phase which has the same
+// sign regardless of initial direction. Collapsed to one "FLICK"
+// prompt to keep the game reliable.
+constexpr uint8_t kActionCount = 3;
 
 }  // namespace
 
@@ -36,20 +37,16 @@ void Games::begin() {
   // Event-level matching catches the clean cases:
   //   TAP prompt   ← Tap event
   //   SHAKE prompt ← Shake event
-  // But flicks often misclassify as Tap (because the user's flick has a
-  // big Z component too) — for those the per-frame raw-sample polling
-  // in runBopIt() does a loose direction check that catches "intent" even
-  // when the firmware-level Flick discriminator rejects the impulse.
+  // FLICK prompts are matched by the per-frame raw-IMU polling inside
+  // runBopIt() — the firmware doesn't fire a "Flick" event anymore.
   imu().onEvent([this](const ImuEvent& e) {
     if (current_ == GameId::None) return;
-    if (e.type == ImuEventType::Tap && expectedAction_ == 0) {
-      actionConsumed_ = true;
-    } else if (e.type == ImuEventType::Flick) {
-      if (expectedAction_ == 1 && e.newFace == Face::Left)  actionConsumed_ = true;
-      if (expectedAction_ == 2 && e.newFace == Face::Right) actionConsumed_ = true;
-    } else if (e.type == ImuEventType::Shake && expectedAction_ == 3) {
-      actionConsumed_ = true;
-    }
+    // Bop It FLICK prompts are matched by the per-sample raw-IMU polling
+    // in runBopIt() (looser thresholds, direction-aware) since flick
+    // discrimination at the firmware level was unreliable on this cube.
+    // Here we only catch the clean cases at the event layer.
+    if (e.type == ImuEventType::Tap && expectedAction_ == 0)         actionConsumed_ = true;
+    else if (e.type == ImuEventType::Shake && expectedAction_ == 2)  actionConsumed_ = true;
   });
 }
 
@@ -141,41 +138,65 @@ void Games::runBopIt() {
     // Each prompt is a full-screen visual cue. Tap uses big text "TAP!";
     // the four directional flicks use a large drawn arrow.
     switch (action) {
-      case 0: display().showBig("TAP!");            break;
-      case 1: display().showArrow(ArrowDir::Left);  break;
-      case 2: display().showArrow(ArrowDir::Right); break;
-      case 3: display().showBig("SHAKE!");          break;
+      case 0: display().showBig("TAP!");    break;
+      case 1: display().showBig("FLICK!");  break;
+      case 2: display().showBig("SHAKE!");  break;
     }
     audio().play(sounds::kMenuBlip);
 
-    // Loose intent-based detection: poll the raw IMU samples at 100 Hz
-    // and accept any spike with the right direction component. Means
-    // the user just needs to move the cube the right way — they don't
-    // need to satisfy the strict Tap / Flick discriminator that often
-    // rejects oblique impulses.
-    constexpr float kMoveThreshold     = 0.40f;  // |linear accel| g
-    constexpr float kDirComponentMin   = 0.25f;  // axis-of-interest g
-    uint32_t deadline = millis() + window;
-    while (!actionConsumed_ && millis() < deadline) {
+    // Per-frame raw IMU polling with TWO outcomes:
+    //   - Correct motion → action consumed (pass)
+    //   - Clearly wrong motion → wrongMotion (miss, ends the game)
+    //   - No motion before deadline → timeout (miss)
+    //
+    // Thresholds are tuned to require a deliberate motion (not just
+    // ambient hand-shake) AND to distinguish direction so continuous
+    // shaking can't cheat TAP / ← / → prompts.
+    constexpr float kMoveThreshold     = 0.40f;  // |linear accel| g — clear this to consider
+    constexpr float kDirComponentMin   = 0.30f;  // axis-of-interest g — match expected direction
+    constexpr float kWrongComponentMin = 0.50f;  // axis-of-OTHER g — miss-out-loud threshold
+    constexpr float kShakeIntentMin    = 1.2f;   // |linMag| for SHAKE prompt
+    constexpr uint32_t kSettleMs       = 180;    // grace period after prompt change
+
+    uint32_t promptShownMs = millis();
+    uint32_t deadline = promptShownMs + window;
+    bool wrongMotion = false;
+    while (!actionConsumed_ && !wrongMotion && millis() < deadline) {
+      if (millis() - promptShownMs < kSettleMs) { delay(6); continue; }
+
       auto s = imu().latest();
       float linMag = sqrtf(s.ax * s.ax + s.ay * s.ay + s.az * s.az);
-      if (linMag > kMoveThreshold) {
-        switch (action) {
-          case 0:  // TAP — body-Z dominant
-            if (fabsf(s.az) > kDirComponentMin) actionConsumed_ = true;
-            break;
-          case 1:  // ← (left)  → +Y component (per calibration)
-            if (s.ay >  kDirComponentMin) actionConsumed_ = true;
-            break;
-          case 2:  // → (right) → -Y component
-            if (s.ay < -kDirComponentMin) actionConsumed_ = true;
-            break;
-          case 3:  // SHAKE — strong motion in any direction, ignore axis
-            if (linMag > 1.0f) actionConsumed_ = true;
-            break;
-        }
+      if (linMag < kMoveThreshold) { delay(6); continue; }
+
+      // Component checks. Per calibration on this cube:
+      //   TAP   → +laz (body-Z up) is the dominant axis (~+0.9g).
+      //   FLICK → -lay (body-Y negative) regardless of physical direction.
+      //   SHAKE → linMag stays very high (~3g) with sustained motion.
+      bool zCorrect    = s.az >  kDirComponentMin;
+      bool flickCorrect= s.ay < -kDirComponentMin;
+      bool shakeStrong = linMag > kShakeIntentMin;
+      // "Strongly wrong" — clear motion on a non-expected axis.
+      bool zStrong     = s.az >  kWrongComponentMin;
+      bool flickStrong = s.ay < -kWrongComponentMin;
+
+      switch (action) {
+        case 0:  // TAP
+          if (zCorrect)              actionConsumed_ = true;
+          else if (flickStrong)      wrongMotion = true;
+          break;
+        case 1:  // FLICK
+          if (flickCorrect)          actionConsumed_ = true;
+          else if (zStrong)          wrongMotion = true;
+          break;
+        case 2:  // SHAKE — any strong motion qualifies; no wrong-direction.
+          if (shakeStrong)           actionConsumed_ = true;
+          break;
       }
-      delay(8);
+      delay(6);
+    }
+    if (wrongMotion) {
+      // Treat wrong-direction motion the same as a miss — same path below.
+      actionConsumed_ = false;
     }
     if (!actionConsumed_) {
       audio().play(sounds::kGameWrong);

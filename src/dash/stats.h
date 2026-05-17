@@ -40,6 +40,11 @@ class Stats {
   void append(const SessionRecord& r);
   StatsSummary summary();
 
+  // Sum of actualSec over sessions whose startedUnix falls on "today" in
+  // the user's local timezone (tzOffsetMin = signed minutes from UTC).
+  // Returns 0 if no records or the system clock hasn't been synced.
+  uint32_t todayFocusedSec(int16_t tzOffsetMin);
+
   // For Portal /api/stats — serialise the full log (or last N entries) as a
   // JSON-lines string. Buffer size matters.
   size_t recentSessionsJson(char* buf, size_t cap, uint8_t limit = 20);

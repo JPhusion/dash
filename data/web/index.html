@@ -66,7 +66,9 @@
     <article class="card" id="session-running" hidden>
       <h3 id="running-label">In session</h3>
       <div class="timer" id="timer">00:00</div>
+      <div class="timer-sub" id="timer-elapsed">elapsed 00:00</div>
       <div class="timer-sub" id="timer-sub">of 25:00 · 0 distractions</div>
+      <div class="timer-sub" id="timer-today">today 0h 00m</div>
       <div class="progress"><div class="fill" id="progress-fill"></div></div>
       <div class="row" style="margin-top: var(--s-3)">
         <span class="mood"><span class="dot"></span><span id="running-mood">focused</span></span>
@@ -243,7 +245,8 @@
       <h3>Developer mode</h3>
       <p class="subtle">Run a hardware diagnostic to verify every peripheral. Walks you through tap, shake, touch, OLED and sound checks one by one.</p>
       <button class="btn primary" id="btn-start-diag">Start diagnostic</button>
-      <button class="btn ghost" id="btn-hide-dev">Hide developer mode</button>
+      <button class="btn danger" id="btn-reboot" style="margin-top: var(--s-2)">Reboot device</button>
+      <button class="btn ghost" id="btn-hide-dev" style="margin-top: var(--s-2)">Hide developer mode</button>
     </div>
 
     <p class="subtle muted" id="footer" style="text-align:center;">firmware —</p>

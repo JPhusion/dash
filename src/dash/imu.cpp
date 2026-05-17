@@ -74,6 +74,16 @@ Imu::Imu()
       currentFace_(Face::Unknown),
       candidateFace_(Face::Unknown),
       candidateFaceSinceMs_(0),
+      spinAccumDeg_(0.0f),
+      spinLastSampleMs_(0),
+      lastSpinFiredMs_(0),
+      tiltSnapshotValid_(false),
+      tiltRefGx_(0), tiltRefGy_(0), tiltRefGz_(0),
+      tiltInProgress_(false),
+      tiltStartMs_(0),
+      lastTiltFiredMs_(0),
+      tiltPeakDevX_(0), tiltPeakDevY_(0), tiltPeakDevZ_(0),
+      tiltPeakMagnitude_(0),
       stationarySinceMs_(0),
       stationaryFired_(false),
       listenerCount_(0) {
@@ -384,72 +394,90 @@ void Imu::sampleLoop() {
       float effThreshold = tapThreshold_;
       if (touch().isTouched()) effThreshold *= 0.6f;
 
-      // Body-Z axis dominance — used for the FIRST tap of a chain to
-      // discriminate from horizontal shakes. Once we're inside a chain
-      // (the 1st tap already fired), this check is dropped: we already
-      // know the user is tapping the cube, so subsequent impulses count
-      // even if they're slightly off-axis. This makes fast double-taps
-      // detect reliably even when the user's taps are oblique.
-      float zAlign = (linMag > 0.001f) ? fabsf(laz) / linMag : 0.0f;
-      const bool alongZ        = (zAlign > 0.55f);
+      // (alongZ check removed — was rejecting valid taps on this cube
+      // because the impulse dissipates across all 3 axes. Shake vs tap
+      // is now decided by the post-spike variance check in stage 2.)
 
       const bool prevQuiet     = (lastLinMag_ < effThreshold * 0.5f);
       const bool inShakeWindow = (nowMs - lastShakeMs_) < 300;
       const bool inTapChain    = (tapCount_ > 0 &&
                                   nowMs - lastTapMs_ < tripleTapWindowMs_);
 
-      bool fire = false;
-      if (linMag > effThreshold &&
-          nowMs > tapCooldownUntilMs_ &&
-          !inShakeWindow) {
-        if (inTapChain) {
-          // Already in a chain — any impulse past the refractory window
-          // counts as the next tap. No direction / prev-quiet gating.
-          fire = true;
-        } else if (alongZ && prevQuiet) {
-          // First tap of a new chain — strict discrimination so a shake
-          // doesn't start a tap chain.
-          fire = true;
-        }
-      }
+      // Gyro discriminator. A clean tap is a translation impulse — the
+      // cube barely rotates. A flick, spin, or pickup-and-jiggle adds
+      // rotational velocity. If gyro is high during the spike, reject
+      // it. Threshold tuned per cube; 220 deg/s is well above hand
+      // tremor / normal motion but below a deliberate flick (~400 deg/s).
+      constexpr float kTapGyroMax = 220.0f;
+      float gyroMagDeg = sqrtf(snap.gx*snap.gx + snap.gy*snap.gy + snap.gz*snap.gz);
+      const bool tooMuchRotation = (gyroMagDeg > kTapGyroMax);
 
-      // Directional flick: a spike NOT along body-Z (so not a tap) but in
-      // the X/Y plane. We emit a Flick event with the dominant horizontal
-      // axis encoded in newFace (Left / Right / Front / Back). Same
-      // refractory and prevQuiet rules as tap so steady motion / shaking
-      // doesn't trigger.
-      if (!fire &&
-          linMag > effThreshold &&
+      // Magnitude window. A finger tap on a ~50 g cube tops out near 2 g
+      // of linear accel. A vigorous shake easily clears 3 g and a bash
+      // exceeds 4 g — those are NOT taps. Bound the candidate spike
+      // between [effThreshold, kTapMaxMag] so out-of-range hits don't
+      // sneak into the tap path.
+      constexpr float kTapMaxMag = 4.0f;
+      const bool tooHard = (linMag > kTapMaxMag);
+
+      // Stage 1 — candidate spike. Magnitude in-window, low rotation,
+      // and either inside an active tap chain or following a quiet
+      // sample (so it's a transient — not the middle of sustained
+      // motion).
+      bool spikeFound = false;
+      if (linMag > effThreshold &&
+          !tooHard &&
           nowMs > tapCooldownUntilMs_ &&
           !inShakeWindow &&
-          !alongZ &&
-          prevQuiet) {
-        // Axis convention is per-cube based on how the IMU is soldered.
-        // For *this* prototype, calibration showed:
-        //   left  → +Y dominant   (lay > 0)
-        //   right → -Y dominant   (lay < 0)
-        // X is unused / cross-axis noise. If a future cube has a
-        // different mounting, run `calibrate` and adjust here.
-        Face dir = Face::Unknown;
-        if (fabsf(lay) >= fabsf(lax)) {
-          dir = (lay > 0) ? Face::Left : Face::Right;
-        } else {
-          dir = (lax > 0) ? Face::Front : Face::Back;
-        }
-        tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
-        emit({ImuEventType::Flick, dir, currentFace_, linMag, 0});
+          !tooMuchRotation &&
+          (inTapChain || prevQuiet)) {
+        spikeFound = true;
       }
 
-      if (fire) {
-        tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
-        if (tapCount_ == 0 || (nowMs - lastTapMs_) > tripleTapWindowMs_) {
-          tapCount_ = 1;
-          firstTapMs_ = nowMs;
-        } else {
+      if (spikeFound) {
+        if (inTapChain) {
+          // Inside a chain we already know the user is tapping — commit
+          // the follow-up tap right now to keep multi-tap snappy.
+          tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
           tapCount_++;
+          lastTapMs_ = nowMs;
+          emit({ImuEventType::Tap, currentFace_, currentFace_, linMag, 0});
+        } else {
+          // First tap of a chain — DEFER emission. We'll commit (or drop)
+          // ~80 ms later based on whether the variance climbs (= shake)
+          // or stays low (= clean transient tap).
+          tapPendingMs_   = nowMs;
+          tapPendingMag_  = linMag;
+          tapPendingFace_ = currentFace_;
+          tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
         }
-        lastTapMs_ = nowMs;
-        emit({ImuEventType::Tap, currentFace_, currentFace_, linMag, 0});
+      }
+
+      // Stage 2 — confirm or drop a pending tap after kTapConfirmMs.
+      // A real tap is a brief impulse — by the confirm tick its
+      // magnitude has decayed to baseline. Sustained motion (cube being
+      // shaken up/down on Z) holds the magnitude near or above the
+      // trigger threshold. Reject the candidate if EITHER:
+      //   - running variance is too high (still shaking)   OR
+      //   - linMag at confirm time is still > 0.6 * effThreshold (the
+      //     impulse hasn't decayed — it's sustained motion, not a tap).
+      constexpr uint32_t kTapConfirmMs   = 80;
+      constexpr float kShakeConfirmRatio = 0.55f;
+      constexpr float kTapDecayRatio     = 0.6f;   // of effThreshold
+      if (tapPendingMs_ > 0 && (nowMs - tapPendingMs_) >= kTapConfirmMs) {
+        const bool isShake     = (runningVar > shakeVariance_ * kShakeConfirmRatio);
+        const bool stillMoving = (linMag    > effThreshold     * kTapDecayRatio);
+        if (!isShake && !stillMoving) {
+          if (tapCount_ == 0 || (nowMs - lastTapMs_) > tripleTapWindowMs_) {
+            tapCount_ = 1;
+            firstTapMs_ = tapPendingMs_;
+          } else {
+            tapCount_++;
+          }
+          lastTapMs_ = tapPendingMs_;
+          emit({ImuEventType::Tap, tapPendingFace_, tapPendingFace_, tapPendingMag_, 0});
+        }
+        tapPendingMs_ = 0;
       }
       lastLinMag_ = linMag;
 
@@ -462,10 +490,142 @@ void Imu::sampleLoop() {
         Face old = currentFace_;
         currentFace_ = f;
         emit({ImuEventType::OrientationChange, f, old, 0.0f, 0});
+        // Face change invalidates the tilt baseline + cancels any
+        // tilt/spin in progress (those gestures are meaningful only when
+        // the resting face is stable).
+        tiltSnapshotValid_ = false;
+        tiltInProgress_ = false;
+        spinAccumDeg_ = 0.0f;
+      }
+
+      // ---- Spin detection. Integrate yaw rate (cube's body-Z gyro) over
+      // time when the cube is flat on a face. A deliberate spin produces
+      // sustained yaw rate; small drift or hand tremor stays below the
+      // floor and decays toward zero. Fires once per spin with direction
+      // encoded in newFace (Left/Right by signed accumulation — the
+      // physical-to-user mapping is calibrated in main.cpp).
+      constexpr float kSpinRateMin    = 80.0f;   // deg/s — engage threshold
+      constexpr float kSpinFireDeg    = 90.0f;   // accumulated deg to fire
+      constexpr uint32_t kSpinCooldownMs = 1200;
+      constexpr float kSpinDecayPerSec = 4.0f;   // multiplier per second
+      if (currentFace_ != Face::Unknown) {
+        float yawDps = snap.gz;
+        float dtSpin = (spinLastSampleMs_ == 0)
+                       ? 0.0f
+                       : (nowMs - spinLastSampleMs_) * 0.001f;
+        spinLastSampleMs_ = nowMs;
+        if (dtSpin > 0.0f && dtSpin < 0.1f) {
+          if (fabsf(yawDps) > kSpinRateMin) {
+            spinAccumDeg_ += yawDps * dtSpin;
+          } else {
+            // Decay so a tiny continuous drift doesn't accumulate, but a
+            // brief plateau mid-spin doesn't reset us.
+            float decay = expf(-kSpinDecayPerSec * dtSpin);
+            spinAccumDeg_ *= decay;
+          }
+        }
+        if (fabsf(spinAccumDeg_) > kSpinFireDeg &&
+            (nowMs - lastSpinFiredMs_) > kSpinCooldownMs) {
+          // Sign → direction. Map both choices to Face::Left/Right so
+          // listeners have a stable encoding; the physical interpretation
+          // is done at the consumer.
+          Face dir = (spinAccumDeg_ > 0) ? Face::Left : Face::Right;
+          emit({ImuEventType::Spin, dir, currentFace_,
+                fabsf(spinAccumDeg_), 0});
+          lastSpinFiredMs_ = nowMs;
+          spinAccumDeg_ = 0.0f;
+        }
+      } else {
+        spinAccumDeg_ = 0.0f;
+        spinLastSampleMs_ = nowMs;
+      }
+
+      // ---- Tilt detection. Snapshot gravity when the cube has been
+      // stable on a face for ~200 ms. Each sample, measure the deviation
+      // of the live gravity vector from the snapshot. When |deviation|
+      // crosses kTiltEngage, mark as tilting and track the peak. When
+      // |deviation| drops back below kTiltDisengage AND the face hasn't
+      // changed, fire Tilt with direction encoded by the peak deviation.
+      constexpr float kTiltEngage      = 0.30f;   // unit-gravity (~17°)
+      constexpr float kTiltDisengage   = 0.15f;
+      constexpr uint32_t kTiltSettleMs = 250;
+      constexpr uint32_t kTiltMaxMs    = 1500;    // tilt must return within
+      constexpr uint32_t kTiltCooldownMs = 700;
+      if (currentFace_ != Face::Unknown &&
+          (nowMs - candidateFaceSinceMs_) > kTiltSettleMs) {
+        if (!tiltSnapshotValid_) {
+          // First settled sample on this face — capture the rest pose.
+          tiltRefGx_ = grx; tiltRefGy_ = gry; tiltRefGz_ = grz;
+          tiltSnapshotValid_ = true;
+          tiltInProgress_ = false;
+        }
+        float devX = grx - tiltRefGx_;
+        float devY = gry - tiltRefGy_;
+        float devZ = grz - tiltRefGz_;
+        float devMag = sqrtf(devX*devX + devY*devY + devZ*devZ);
+        if (!tiltInProgress_) {
+          if (devMag > kTiltEngage &&
+              (nowMs - lastTiltFiredMs_) > kTiltCooldownMs) {
+            tiltInProgress_ = true;
+            tiltStartMs_ = nowMs;
+            tiltPeakDevX_ = devX;
+            tiltPeakDevY_ = devY;
+            tiltPeakDevZ_ = devZ;
+            tiltPeakMagnitude_ = devMag;
+          }
+        } else {
+          // Track the peak deviation.
+          if (devMag > tiltPeakMagnitude_) {
+            tiltPeakDevX_ = devX;
+            tiltPeakDevY_ = devY;
+            tiltPeakDevZ_ = devZ;
+            tiltPeakMagnitude_ = devMag;
+          }
+          const bool tooLong = (nowMs - tiltStartMs_) > kTiltMaxMs;
+          if (devMag < kTiltDisengage) {
+            // Returned to neutral — fire Tilt with the peak direction.
+            // Direction is encoded in newFace using whichever of the two
+            // non-face axes had the largest peak deviation, signed:
+            //   +X → Face::Right    -X → Face::Left
+            //   +Y → Face::Back     -Y → Face::Front
+            //   +Z → Face::Up       -Z → Face::Down
+            // The face-normal axis is masked out so deviations along the
+            // resting axis don't bias direction selection.
+            float refAx = fabsf(tiltRefGx_);
+            float refAy = fabsf(tiltRefGy_);
+            float refAz = fabsf(tiltRefGz_);
+            float dXabs = fabsf(tiltPeakDevX_);
+            float dYabs = fabsf(tiltPeakDevY_);
+            float dZabs = fabsf(tiltPeakDevZ_);
+            if (refAx >= refAy && refAx >= refAz) dXabs = 0.0f;
+            else if (refAy >= refAz)              dYabs = 0.0f;
+            else                                   dZabs = 0.0f;
+            Face dir;
+            if (dXabs >= dYabs && dXabs >= dZabs) {
+              dir = (tiltPeakDevX_ > 0) ? Face::Right : Face::Left;
+            } else if (dYabs >= dZabs) {
+              dir = (tiltPeakDevY_ > 0) ? Face::Back : Face::Front;
+            } else {
+              dir = (tiltPeakDevZ_ > 0) ? Face::Up   : Face::Down;
+            }
+            emit({ImuEventType::Tilt, dir, currentFace_,
+                  tiltPeakMagnitude_, 0});
+            tiltInProgress_ = false;
+            lastTiltFiredMs_ = nowMs;
+          } else if (tooLong) {
+            // Held too long without returning — abandon, don't fire.
+            // The cube probably completed a face change, which the
+            // OrientationChange path handles.
+            tiltInProgress_ = false;
+          }
+        }
+      } else {
+        tiltSnapshotValid_ = false;
+        tiltInProgress_ = false;
       }
 
       // Opportunistic stationary detect: gyro near zero AND linear accel small.
-      float gyroMagDeg = sqrtf(snap.gx*snap.gx + snap.gy*snap.gy + snap.gz*snap.gz);
+      // gyroMagDeg was already computed earlier (for the tap discriminator).
       if (gyroMagDeg < kStationaryGyroThresh && linMag < kStationaryAccelThresh) {
         if (stationarySinceMs_ == 0) stationarySinceMs_ = nowMs;
         sumGx += (gx / kDeg2Rad) * kGyroScale + biasGx_;  // raw counts (revert correction)

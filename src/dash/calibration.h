@@ -15,6 +15,12 @@ namespace dash {
 
 void runCalibration();
 
+// Static-orientation calibration. Walks the user through the cube's
+// resting orientations (screen forward / up / down / rotated R / L /
+// upside down) plus four tilt directions from screen-up, captures the
+// stable gravity vector for each, and prints a summary table.
+void runOrientCalibration();
+
 }  // namespace dash
 
 #endif

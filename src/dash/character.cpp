@@ -1,5 +1,6 @@
 #include "dash/character.h"
 
+#include "dash/imu.h"
 #include "dash/log.h"
 #include "dash/settings.h"
 
@@ -8,6 +9,42 @@ namespace dash {
 namespace {
 constexpr const char* kTag = "Char";
 Character* g_singleton = nullptr;
+
+// Spinning-eye animation. Driven by a one-shot FreeRTOS task so callers
+// (IMU event handlers) don't block waiting for the 1.4 s of swirl.
+void dizzyTask(void* arg) {
+  uint32_t holdMs = (uint32_t)(uintptr_t)arg;
+  display().setAutoLook(false);
+  constexpr int kRevolutions = 3;
+  constexpr int kStepsPerRev = 12;
+  constexpr uint32_t kStepDelayMs = 35;     // ~3 rev / 1.26 s
+  for (int rev = 0; rev < kRevolutions; rev++) {
+    for (int s = 0; s < kStepsPerRev; s++) {
+      float theta = (float)s * (2.0f * 3.14159265f / kStepsPerRev);
+      // Direction alternates per revolution so the swirl feels woozy.
+      if (rev % 2 == 1) theta = -theta;
+      float x = cosf(theta);
+      float y = sinf(theta);
+      display().lookAt(x, y);
+      vTaskDelay(pdMS_TO_TICKS(kStepDelayMs));
+    }
+  }
+  // Hold the Dizzy face for the requested duration, then auto-return via
+  // the character react-cooldown.
+  character().react(EyeState::Dizzy, holdMs);
+  vTaskDelay(pdMS_TO_TICKS(holdMs));
+  display().lookAt(0.0f, 0.0f);
+  display().setAutoLook(true);
+  vTaskDelete(nullptr);
+}
+
+void gravityLookReturnTask(void* arg) {
+  uint32_t delayMs = (uint32_t)(uintptr_t)arg;
+  vTaskDelay(pdMS_TO_TICKS(delayMs));
+  display().lookAt(0.0f, 0.0f);
+  display().setAutoLook(true);
+  vTaskDelete(nullptr);
+}
 }  // namespace
 
 Character::Character()
@@ -190,6 +227,33 @@ void Character::greetBasedOnTime() {
   } else {
     // Late night / very early — gentle.
     react(EyeState::Sleepy, 1200);
+  }
+}
+
+void Character::playDizzyAnimation(uint32_t hold_ms) {
+  xTaskCreate(&dizzyTask, "dizzy", 3072,
+              (void*)(uintptr_t)hold_ms, 1, nullptr);
+}
+
+void Character::lookAtGravity(uint32_t returnMs) {
+  // Project the gravity vector onto the screen plane. Without per-cube
+  // calibration of which body axis is "screen forward", we approximate:
+  // grx → eye X (cube right = screen right is a reasonable default for
+  // most mountings), -grz → eye Y (downward gravity on this cube reads
+  // as a downward eye gaze on the screen). If the sign turns out wrong
+  // on this cube's mounting, swap one or both here.
+  auto s = imu().latest();
+  float lx = s.gravityX;
+  float ly = -s.gravityZ;
+  if (lx > 1.0f) lx = 1.0f;
+  if (lx < -1.0f) lx = -1.0f;
+  if (ly > 1.0f) ly = 1.0f;
+  if (ly < -1.0f) ly = -1.0f;
+  display().setAutoLook(false);
+  display().lookAt(lx, ly);
+  if (returnMs > 0) {
+    xTaskCreate(&gravityLookReturnTask, "grav-look-ret", 2048,
+                (void*)(uintptr_t)returnMs, 1, nullptr);
   }
 }
 

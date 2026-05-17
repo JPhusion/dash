@@ -37,6 +37,8 @@ enum class EyeState : uint8_t {
   Heart,
   Celebrating,
   Searching,
+  Dizzy,      // glazed / wobbly look used after spin and sustained shake
+  Annoyed,    // narrow / irritated look for repeated nudges
 };
 
 enum class Overlay : uint8_t {
@@ -48,6 +50,17 @@ enum class Overlay : uint8_t {
   Big,              // hides eyes, prints one BIG word centred (game prompts)
   Inverted,         // big text but the whole screen inverted (reaction GO!)
   Arrow,            // hides eyes, draws a large arrow (bop-it flick prompts)
+  GravityBall,      // debug visualisation: a ball that falls toward gravity.
+                    // Reads the IMU's latest gravity vector each frame and
+                    // draws a circle at the corresponding screen position,
+                    // plus the raw gx/gy/gz values along the top edge so
+                    // the cube's gravity-to-screen mapping can be eyeballed.
+  MenuList,         // 3-row vertical list with title + current item highlit
+                    // + grey-out hints for the items above/below. Used by
+                    // the face-up settings/games menu.
+  MenuEdit,         // single-setting view: name + horizontal value bar +
+                    // numeric/text value. Used while a setting is being
+                    // tilted left/right to adjust.
 };
 
 enum class ArrowDir : uint8_t {
@@ -68,6 +81,7 @@ class Display {
   // High-level state.
   void setEyeState(EyeState s);
   EyeState eyeState() const;
+  Overlay overlay() const { return overlay_; }
 
   // Overlays — all replace the current draw mode until cleared.
   void showBootSplash();
@@ -84,6 +98,22 @@ class Display {
   // Large centered arrow (Bop It flick prompts). One of Left, Right,
   // Up, Down — drawn as a filled triangle head + thick rectangular stem.
   void showArrow(ArrowDir dir);
+
+  // Debug: turn on the gravity-ball visualisation. The render task reads
+  // imu().latest() each frame and draws a ball at the screen position
+  // corresponding to gravity. clearOverlay() turns it off.
+  void showGravityBall();
+
+  // Face-up tilt menu — list view. `title` is the menu name (e.g. "MENU"
+  // or "GAMES"). `prev`/`next` may be empty for endpoints. `item` is the
+  // currently-highlit row.
+  void showMenuList(const char* title,
+                    const char* prev, const char* item, const char* next);
+
+  // Face-up tilt menu — edit view. `name` is the setting (e.g. "Volume").
+  // `pct` is 0..100 and drives the bar. `value` is the human-readable
+  // value (e.g. "65" or "25 min").
+  void showMenuEdit(const char* name, uint8_t pct, const char* value);
 
   void clearOverlay();
 
@@ -126,6 +156,14 @@ class Display {
   char     qrPayload_[128];
   bool     autoLook_;
   ArrowDir arrowDir_;
+
+  // Menu overlay state (MenuList / MenuEdit).
+  char     menuTitle_[16];
+  char     menuPrev_[20];
+  char     menuItem_[20];
+  char     menuNext_[20];
+  char     menuValue_[16];
+  uint8_t  menuBarPct_;
 };
 
 // Singleton — there is only one OLED.

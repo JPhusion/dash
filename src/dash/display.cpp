@@ -5,8 +5,12 @@
 #include "Common.h"
 #include "Face.h"
 #include "FaceEmotions.hpp"
+#include "dash/imu.h"
 #include "dash/log.h"
 #include "dash/pins.h"
+#include "dash/session.h"
+#include "dash/state_machine.h"
+#include "dash/wifi_ap.h"
 
 namespace dash {
 
@@ -17,7 +21,10 @@ constexpr uint16_t kScreenWidth  = 128;
 constexpr uint16_t kScreenHeight = 64;
 constexpr uint16_t kEyeSize      = 38;
 
-Face* g_face = nullptr;
+// `::Face` (global namespace) is the eye-library class. `dash::Face` is the
+// IMU's orientation enum — they collide inside `namespace dash` so every
+// reference to the eye-library type below must be fully qualified.
+::Face* g_face = nullptr;
 Display* g_singleton = nullptr;
 
 // Map a Dash EyeState to the underlying Face/Eye library's emotion + look.
@@ -51,11 +58,15 @@ EyeStateMapping mapEyeState(EyeState s) {
     case EyeState::Heart:        return {eEmotions::Glee,      0,  0};
     case EyeState::Celebrating:  return {eEmotions::Glee,      0,  1};
     case EyeState::Searching:    return {eEmotions::Suspicious, 0, 0};
+    // Dizzy uses Sleepy with eyes drifted off-center — combined with the
+    // periodic look-shuffle in playDizzyAnimation() this reads as "woozy".
+    case EyeState::Dizzy:        return {eEmotions::Sleepy,    -1, -1};
+    case EyeState::Annoyed:      return {eEmotions::Unimpressed, 0,  0};
   }
   return {eEmotions::Normal, 0, 0};
 }
 
-void applyLook(Face* face, int8_t x, int8_t y) {
+void applyLook(::Face* face, int8_t x, int8_t y) {
   // Map int8 (-1,0,1) to library's float (-1.0..1.0).
   face->Look.LookAt(static_cast<float>(x), static_cast<float>(y));
 }
@@ -72,10 +83,16 @@ Display::Display()
       overlay_(Overlay::None),
       progressPct_(0),
       autoLook_(true),
-      arrowDir_(ArrowDir::None) {
+      arrowDir_(ArrowDir::None),
+      menuBarPct_(0) {
   text1_[0] = '\0';
   text2_[0] = '\0';
   qrPayload_[0] = '\0';
+  menuTitle_[0] = '\0';
+  menuPrev_[0]  = '\0';
+  menuItem_[0]  = '\0';
+  menuNext_[0]  = '\0';
+  menuValue_[0] = '\0';
 }
 
 bool Display::begin() {
@@ -85,7 +102,7 @@ bool Display::begin() {
   }
   // u8g2's constructor in Face.cpp already supplies SCL/SDA pins; calling
   // Face's constructor invokes u8g2.begin() which sets up Wire.
-  g_face = new (std::nothrow) Face(kScreenWidth, kScreenHeight, kEyeSize);
+  g_face = new (std::nothrow) ::Face(kScreenWidth, kScreenHeight, kEyeSize);
   if (!g_face) {
     log::error(kTag, "Face alloc failed");
     return false;
@@ -184,6 +201,33 @@ void Display::showArrow(ArrowDir dir) {
   xSemaphoreGive(mutex_);
 }
 
+void Display::showGravityBall() {
+  xSemaphoreTake(mutex_, portMAX_DELAY);
+  overlay_ = Overlay::GravityBall;
+  xSemaphoreGive(mutex_);
+}
+
+void Display::showMenuList(const char* title,
+                           const char* prev, const char* item, const char* next) {
+  xSemaphoreTake(mutex_, portMAX_DELAY);
+  overlay_ = Overlay::MenuList;
+  strlcpy(menuTitle_, title ? title : "", sizeof(menuTitle_));
+  strlcpy(menuPrev_,  prev  ? prev  : "", sizeof(menuPrev_));
+  strlcpy(menuItem_,  item  ? item  : "", sizeof(menuItem_));
+  strlcpy(menuNext_,  next  ? next  : "", sizeof(menuNext_));
+  xSemaphoreGive(mutex_);
+}
+
+void Display::showMenuEdit(const char* name, uint8_t pct, const char* value) {
+  if (pct > 100) pct = 100;
+  xSemaphoreTake(mutex_, portMAX_DELAY);
+  overlay_ = Overlay::MenuEdit;
+  strlcpy(menuTitle_, name  ? name  : "", sizeof(menuTitle_));
+  strlcpy(menuValue_, value ? value : "", sizeof(menuValue_));
+  menuBarPct_ = pct;
+  xSemaphoreGive(mutex_);
+}
+
 void Display::clearOverlay() {
   xSemaphoreTake(mutex_, portMAX_DELAY);
   overlay_ = Overlay::None;
@@ -228,6 +272,8 @@ void Display::renderTaskLoop() {
     Overlay overlay;
     uint8_t pct;
     char l1[24], l2[24], qr[128];
+    char mTitle[16], mPrev[20], mItem[20], mNext[20], mValue[16];
+    uint8_t mBar;
     ArrowDir arrowDir;
     xSemaphoreTake(mutex_, portMAX_DELAY);
     want = targetEye_;
@@ -237,6 +283,12 @@ void Display::renderTaskLoop() {
     memcpy(l1, text1_, sizeof(l1));
     memcpy(l2, text2_, sizeof(l2));
     memcpy(qr, qrPayload_, sizeof(qr));
+    memcpy(mTitle, menuTitle_, sizeof(mTitle));
+    memcpy(mPrev,  menuPrev_,  sizeof(mPrev));
+    memcpy(mItem,  menuItem_,  sizeof(mItem));
+    memcpy(mNext,  menuNext_,  sizeof(mNext));
+    memcpy(mValue, menuValue_, sizeof(mValue));
+    mBar = menuBarPct_;
     xSemaphoreGive(mutex_);
 
     if (want != appliedEye_) {
@@ -250,7 +302,8 @@ void Display::renderTaskLoop() {
         (overlay == Overlay::Text || overlay == Overlay::QR ||
          overlay == Overlay::BootSplash ||
          overlay == Overlay::Big || overlay == Overlay::Inverted ||
-         overlay == Overlay::Arrow);
+         overlay == Overlay::Arrow || overlay == Overlay::GravityBall ||
+         overlay == Overlay::MenuList || overlay == Overlay::MenuEdit);
 
     if (isHidingOverlay) {
       u8g2.clearBuffer();
@@ -341,6 +394,127 @@ void Display::renderTaskLoop() {
             break;
           default: break;
         }
+      } else if (overlay == Overlay::GravityBall) {
+        // Debug visualisation: a ball that "falls" toward gravity. We try
+        // both intuitive 2-axis mappings of the body-frame gravity onto
+        // the screen, drawn side-by-side, so the user can see which one
+        // matches their physical intuition.
+        //
+        // Left half  (cx=32, cy=32): ball at (gx, gy)
+        // Right half (cx=96, cy=32): ball at (gx, gz)
+        //
+        // Labels and the live gx/gy/gz numbers are printed across the
+        // top edge so the user can correlate "I tilted to the right" with
+        // the actual gravity components.
+        auto s = imu().latest();
+        u8g2.setFont(u8g2_font_5x7_tr);
+        char buf[40];
+        snprintf(buf, sizeof(buf), "x%+.2f y%+.2f z%+.2f",
+                 s.gravityX, s.gravityY, s.gravityZ);
+        u8g2.setCursor(0, 7);
+        u8g2.print(buf);
+        // Two arenas, each 60 px wide, 50 px tall, side-by-side, with a
+        // central separator.
+        const int arenaR = 22;                      // arena radius
+        const int leftCx = 32, rightCx = 96;
+        const int cy = 38;
+        u8g2.drawFrame(leftCx - arenaR,  cy - arenaR, arenaR*2, arenaR*2);
+        u8g2.drawFrame(rightCx - arenaR, cy - arenaR, arenaR*2, arenaR*2);
+        // Labels under each arena.
+        u8g2.setCursor(leftCx - 12, 64);  u8g2.print("xy");
+        u8g2.setCursor(rightCx - 12, 64); u8g2.print("xz");
+        // Clamp the gravity components to [-1, 1] so out-of-range values
+        // still show inside the arena.
+        auto clamp = [](float v) {
+          if (v >  1.0f) return  1.0f;
+          if (v < -1.0f) return -1.0f;
+          return v;
+        };
+        float gx = clamp(s.gravityX);
+        float gy = clamp(s.gravityY);
+        float gz = clamp(s.gravityZ);
+        const int r = 5;   // ball radius
+        // Mapping LEFT: x = gx (cube right → screen right);
+        //              y = gy (cube +Y → screen down).
+        int lx = leftCx  + (int)(gx * (arenaR - r));
+        int ly = cy      + (int)(gy * (arenaR - r));
+        u8g2.drawDisc(lx, ly, r);
+        // Mapping RIGHT: x = gx, y = gz.
+        int rx = rightCx + (int)(gx * (arenaR - r));
+        int ry = cy      + (int)(gz * (arenaR - r));
+        u8g2.drawDisc(rx, ry, r);
+      } else if (overlay == Overlay::MenuList) {
+        // Three-row list view:
+        //   row 0 (top, small): previous item (greyed) or chevron
+        //   row 1 (mid, big):   highlighted item, drawn inverted
+        //   row 2 (bottom, small): next item (greyed)
+        // Tiny title bar at the very top.
+        u8g2.setFont(u8g2_font_5x7_tr);
+        if (mTitle[0]) {
+          int tw = u8g2.getStrWidth(mTitle);
+          u8g2.setCursor((kScreenWidth - tw) / 2, 8);
+          u8g2.print(mTitle);
+        }
+        // Previous item — dimmed (rendered as plain text at small size).
+        u8g2.setFont(u8g2_font_helvR08_tr);
+        if (mPrev[0]) {
+          int w = u8g2.getStrWidth(mPrev);
+          u8g2.setCursor((kScreenWidth - w) / 2, 22);
+          u8g2.print(mPrev);
+        } else {
+          // Top-of-list — show an up chevron hint.
+          u8g2.setCursor(kScreenWidth / 2 - 3, 22);
+          u8g2.print("^");
+        }
+        // Current item — highlighted in an inverted bar.
+        u8g2.drawBox(0, 27, kScreenWidth, 18);
+        u8g2.setDrawColor(0);
+        u8g2.setFont(u8g2_font_helvB12_tr);
+        if (mItem[0]) {
+          int w = u8g2.getStrWidth(mItem);
+          int x = (kScreenWidth - w) / 2;
+          if (x < 2) x = 2;
+          u8g2.setCursor(x, 41);
+          u8g2.print(mItem);
+        }
+        u8g2.setDrawColor(1);
+        u8g2.setFont(u8g2_font_helvR08_tr);
+        if (mNext[0]) {
+          int w = u8g2.getStrWidth(mNext);
+          u8g2.setCursor((kScreenWidth - w) / 2, 58);
+          u8g2.print(mNext);
+        } else {
+          u8g2.setCursor(kScreenWidth / 2 - 3, 58);
+          u8g2.print("v");
+        }
+      } else if (overlay == Overlay::MenuEdit) {
+        // Single-setting view:
+        //   top:    setting name
+        //   middle: big numeric/text value
+        //   bottom: horizontal bar with current pct
+        u8g2.setFont(u8g2_font_helvB08_tr);
+        if (mTitle[0]) {
+          int w = u8g2.getStrWidth(mTitle);
+          u8g2.setCursor((kScreenWidth - w) / 2, 12);
+          u8g2.print(mTitle);
+        }
+        u8g2.setFont(u8g2_font_logisoso18_tr);
+        if (mValue[0]) {
+          int w = u8g2.getStrWidth(mValue);
+          int x = (kScreenWidth - w) / 2;
+          if (x < 2) x = 2;
+          u8g2.setCursor(x, 38);
+          u8g2.print(mValue);
+        }
+        // Horizontal bar across the bottom. Frame + filled portion.
+        const int barX = 8, barY = 50, barW = kScreenWidth - 16, barH = 8;
+        u8g2.drawFrame(barX, barY, barW, barH);
+        int fill = (int)((barW - 2) * (int)mBar / 100);
+        if (fill > 0) u8g2.drawBox(barX + 1, barY + 1, fill, barH - 2);
+        // Tilt arrows as hints at the bar's left/right.
+        u8g2.setFont(u8g2_font_5x7_tr);
+        u8g2.setCursor(1, barY + 7);    u8g2.print("<");
+        u8g2.setCursor(kScreenWidth - 6, barY + 7); u8g2.print(">");
       } else {
         // Simple ASCII rendering for QR until we add a real QR code lib.
         u8g2.setFont(u8g2_font_5x7_tr);
@@ -357,9 +531,50 @@ void Display::renderTaskLoop() {
       // bar onto the same buffer, and send once. Without this the user
       // sees a flicker because the bar is drawn AFTER the eye lib already
       // sent a frame without it.
+      //
+      // We additionally composite a small MM:SS countdown in the
+      // top-right corner when we're mid-session AND running standalone
+      // (no phone associated with the AP) — so the user can glance at
+      // the cube and see time-remaining without the portal open.
       const bool progressOverlay = (overlay == Overlay::Progress);
-      g_face->DeferSend = progressOverlay;
+      bool drawCountdown = false;
+      char countdownBuf[8] = {0};
+      if (stateMachine().state() == DeviceState::InSession &&
+          wifiAp().stationCount() == 0) {
+        auto snap = session().snapshot();
+        if (snap.active && snap.targetMin > 0) {
+          uint32_t elapsedMs =
+              (millis() - snap.startedAtMs) - snap.pausedMs;
+          uint32_t totalSec = (uint32_t)snap.targetMin * 60UL;
+          uint32_t elapsedSec = elapsedMs / 1000UL;
+          uint32_t remaining =
+              (elapsedSec >= totalSec) ? 0 : (totalSec - elapsedSec);
+          uint32_t mm = remaining / 60UL;
+          uint32_t ss = remaining % 60UL;
+          if (mm > 999) mm = 999;
+          snprintf(countdownBuf, sizeof(countdownBuf),
+                   "%02u:%02u", (unsigned)mm, (unsigned)ss);
+          drawCountdown = true;
+        }
+      }
+
+      const bool defer = progressOverlay || drawCountdown;
+      g_face->DeferSend = defer;
       g_face->Update();
+      if (drawCountdown) {
+        // Top-right corner. 5x7 glyphs => "MM:SS" is 25 px wide. Clear
+        // the underlying pixels first so the eye animation doesn't
+        // bleed through the digits.
+        u8g2.setFont(u8g2_font_5x7_tr);
+        int w = u8g2.getStrWidth(countdownBuf);
+        int x = kScreenWidth - w - 2;
+        if (x < 0) x = 0;
+        u8g2.setDrawColor(0);
+        u8g2.drawBox(x - 1, 0, w + 2, 9);
+        u8g2.setDrawColor(1);
+        u8g2.setCursor(x, 7);
+        u8g2.print(countdownBuf);
+      }
       if (progressOverlay) {
         u8g2.setDrawColor(0);
         u8g2.drawBox(0, 60, kScreenWidth, 4);
@@ -368,6 +583,8 @@ void Display::renderTaskLoop() {
         u8g2.drawFrame(0, 60, kScreenWidth, 4);
         int filled = (pct * (kScreenWidth - 2)) / 100;
         u8g2.drawBox(1, 61, filled, 2);
+      }
+      if (defer) {
         u8g2.sendBuffer();
         g_face->DeferSend = false;
       }

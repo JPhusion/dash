@@ -23,6 +23,26 @@
 
 namespace dash {
 
+// Test hooks defined in main.cpp — bridge to the menu state machine so
+// the CLI can drive the menu end-to-end without physical tilt events.
+namespace menutest {
+  bool isOpen();
+  void open();
+  void close();
+  void tap();
+  void tilt(dash::Face d);
+  uint8_t mode();
+  uint8_t topIndex();
+  uint8_t gamesIndex();
+  const char* topLabel(uint8_t i);
+  void setAutoClose(bool on);
+  bool autoCloseEnabled();
+  dash::Face navUpFace();
+  dash::Face navDownFace();
+  dash::Face navIncFace();
+  dash::Face navDecFace();
+}
+
 namespace {
 constexpr const char* kTag = "CLI";
 DebugCli* g_singleton = nullptr;
@@ -49,8 +69,12 @@ void printHelp() {
   Serial.println(F("stats [fake N | reset]"));
   Serial.println(F("heap                 — heap snapshot"));
   Serial.println(F("ap                   — wifi info"));
+  Serial.println(F("ball | ball off      — gravity-ball debug overlay"));
+  Serial.println(F("menu open|close|state|tap  — drive the face-up menu"));
+  Serial.println(F("mtilt up|down|left|right|front|back  — inject Tilt event"));
   Serial.println(F("selftest             — run the automated suite"));
   Serial.println(F("calibrate            — gesture-data capture walkthrough"));
+  Serial.println(F("orient               — orientation (gravity vector) walkthrough"));
   Serial.println();
 }
 
@@ -286,6 +310,72 @@ void DebugCli::dispatch(const String& line) {
     return;
   }
   if (cmd == "sleep") { power().enterDeepSleep(0); return; }
+  if (cmd == "ball") {
+    if (n >= 2 && t[1] == "off") {
+      display().clearOverlay();
+      Serial.println("ball overlay OFF");
+    } else {
+      display().showGravityBall();
+      Serial.println("ball overlay ON — tilt cube to watch the dot. `ball off` to hide.");
+    }
+    return;
+  }
+
+  if (cmd == "menu" && n >= 2) {
+    const String& sub = t[1];
+    if (sub == "open") {
+      menutest::open();
+      Serial.println("menu opened");
+    } else if (sub == "close") {
+      menutest::close();
+      Serial.println("menu closed");
+    } else if (sub == "tap") {
+      menutest::tap();
+      Serial.println("menu tap");
+    } else if (sub == "state") {
+      static const char* kModes[] = {"Closed","TopLevel","GamesSubmenu","Editing"};
+      uint8_t m = menutest::mode();
+      Serial.printf("menu: open=%d mode=%s topIdx=%u top=%s gamesIdx=%u autoclose=%d\n",
+                    (int)menutest::isOpen(),
+                    (m < 4) ? kModes[m] : "?",
+                    menutest::topIndex(),
+                    menutest::topLabel(menutest::topIndex()),
+                    menutest::gamesIndex(),
+                    (int)menutest::autoCloseEnabled());
+    } else if (sub == "autoclose" && n >= 3) {
+      bool on = (t[2] == "on" || t[2] == "1");
+      menutest::setAutoClose(on);
+      Serial.printf("autoclose=%d\n", (int)on);
+    } else {
+      Serial.println("usage: menu open|close|tap|state|autoclose on|off");
+    }
+    return;
+  }
+  if (cmd == "mtilt" && n >= 2) {
+    Face dir = parseFace(t[1]);
+    Serial.printf("inject Tilt newFace=%s\n", faceToString(dir));
+    // Two paths: direct (just the menu) and via the event pipeline (full
+    // path including listeners). Use the event pipeline so we exercise
+    // the same code path real tilts would.
+    imu().injectEvent({ImuEventType::Tilt, dir, imu().currentFace(), 0.5f, 0});
+    return;
+  }
+  if (cmd == "mnav" && n >= 2) {
+    // Menu-action-named navigation. Bypasses the face-axis naming so
+    // `mnav down` reliably scrolls down regardless of which Face value
+    // happens to be mapped to that nav direction by the per-cube
+    // calibration constants. Calls menutest::tilt() directly (no event
+    // pipeline) — exercises ONLY the menu state machine.
+    Face dir = Face::Unknown;
+    if      (t[1] == "up")    dir = menutest::navUpFace();
+    else if (t[1] == "down")  dir = menutest::navDownFace();
+    else if (t[1] == "right") dir = menutest::navIncFace();
+    else if (t[1] == "left")  dir = menutest::navDecFace();
+    else { Serial.println("usage: mnav up|down|left|right"); return; }
+    Serial.printf("mnav %s -> face=%s\n", t[1].c_str(), faceToString(dir));
+    menutest::tilt(dir);
+    return;
+  }
   if (cmd == "heap") {
     Serial.printf("free=%u largest=%u\n",
                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
@@ -340,6 +430,7 @@ void DebugCli::dispatch(const String& line) {
 
   if (cmd == "selftest")  { runSelfTest();    return; }
   if (cmd == "calibrate") { runCalibration(); return; }
+  if (cmd == "orient")    { runOrientCalibration(); return; }
 
   Serial.printf("[CLI] unknown command: %s\n", cmd.c_str());
 }

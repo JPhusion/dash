@@ -161,6 +161,54 @@ def boop() -> np.ndarray:
     return envelope(sine(620, 0.06, amp=0.45), 0.003, 0.03)
 
 
+def surprised() -> np.ndarray:
+    """Sharp 'eh?!' — quick up-sweep then a small wobble. Used when the
+    cube gets tipped or rotated mid-rest."""
+    return concat(
+        envelope(pitch_sweep(540, 980, 0.10, wave="triangle", amp=0.55), 0.004, 0.03),
+        envelope(sine(900, 0.05, amp=0.4), 0.003, 0.04),
+    )
+
+
+def annoyed() -> np.ndarray:
+    """Grumbly two-tone — like 'hrmph.' Lower pitches, descending. Used
+    when the cube is repeatedly nudged or held in a weird orientation."""
+    return concat(
+        envelope(square(220, 0.10, amp=0.30), 0.005, 0.04),
+        silence(0.02),
+        envelope(square(180, 0.14, amp=0.30), 0.005, 0.06),
+    )
+
+
+def confused() -> np.ndarray:
+    """Wobbly questioning tone — alternating up/down sweeps like a
+    'wuh…?' Used for shake / disorientation reactions."""
+    return concat(
+        envelope(pitch_sweep(620, 480, 0.10, wave="sine", amp=0.45), 0.004, 0.03),
+        envelope(pitch_sweep(480, 660, 0.10, wave="sine", amp=0.45), 0.004, 0.03),
+        envelope(pitch_sweep(660, 540, 0.10, wave="sine", amp=0.4), 0.004, 0.05),
+    )
+
+
+def dizzy() -> np.ndarray:
+    """Wobbly, woozy descent — three down-sweeps with vibrato. Used after
+    a spin or sustained shake to convey 'whoa, I'm dizzy.'"""
+    return concat(
+        envelope(pitch_sweep(880, 660, 0.14, wave="triangle", amp=0.5), 0.005, 0.04),
+        envelope(pitch_sweep(760, 540, 0.14, wave="triangle", amp=0.45), 0.005, 0.04),
+        envelope(pitch_sweep(620, 420, 0.18, wave="triangle", amp=0.42), 0.005, 0.08),
+    )
+
+
+def curious() -> np.ndarray:
+    """Lilting two-note 'oh?' for non-neutral orientations. Friendlier
+    than 'tilt' — a softer head-tilt question."""
+    return concat(
+        envelope(sine(560, 0.08, amp=0.45), 0.005, 0.03),
+        envelope(sine(720, 0.10, amp=0.45), 0.005, 0.05),
+    )
+
+
 def test_tone() -> np.ndarray:
     """A clearly audible 1.2-second tone used by the speaker-test step in
     the diagnostic walkthrough. Two-note alternating pattern so it's
@@ -325,6 +373,11 @@ SOUNDS: Dict[str, Callable[[], np.ndarray]] = {
     "whoa": whoa,
     "tilt": tilt,
     "boop": boop,
+    "surprised": surprised,
+    "annoyed": annoyed,
+    "confused": confused,
+    "dizzy": dizzy,
+    "curious": curious,
     "good_morning": good_morning,
     "milestone": milestone,
     "menu_blip": menu_blip,
