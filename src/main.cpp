@@ -150,18 +150,33 @@ const char* imuEventName(dash::ImuEventType t) {
   return "?";
 }
 
+// Silence the cube's ambient reactions when something else owns the
+// input stream — during games (games.cpp consumes), in the menu
+// (menu:: consumes nav), and while the diag walkthrough is open on
+// the phone. Without this guard the user sees Dash reacting + state
+// transitions happening underneath the test/game they're running.
+bool ambientReactionsSilenced() {
+  if (dash::games().current() != dash::GameId::None) return true;
+  if (menu::active) return true;
+  if (dash::portal().diagModeActive()) return true;
+  return false;
+}
+
 void onImuEvent(const dash::ImuEvent& e) {
   using dash::ImuEventType;
   dash::portal().recordDiagEvent(imuEventName(e.type));
+  const bool silenced = ambientReactionsSilenced();
   switch (e.type) {
     case ImuEventType::Tap:
       dash::log::info("Main", "tap (mag=%.2fg)", e.magnitude);
       if (menu::active) { menu::select(); break; }
+      if (silenced) break;
       dash::display().blink();
       dash::sounds::playTapAck();
       break;
     case ImuEventType::DoubleTap:
       dash::log::info("Main", "double-tap");
+      if (silenced) break;
       // Distinct two-note chime so the user hears "double-tap detected"
       // separately from the per-tap chirps.
       dash::sounds::play(dash::sounds::kDoubleTapAck, true);
@@ -184,6 +199,7 @@ void onImuEvent(const dash::ImuEvent& e) {
     case ImuEventType::TripleTap:
       dash::log::info("Main", "triple-tap");
       if (menu::active) { menu::exit_(true); break; }
+      if (silenced) break;
       // Otherwise: deep-sleep gesture, deferred onto its own task.
       xTaskCreate(&deferred::sleepSequenceTask, "sleep-seq", 4096,
                   nullptr, 1, nullptr);
@@ -191,6 +207,7 @@ void onImuEvent(const dash::ImuEvent& e) {
     case ImuEventType::Shake:
       dash::log::info("Main", "shake (mag=%.2f)", e.magnitude);
       if (menu::active) { menu::next(); break; }
+      if (silenced) break;
       dash::sounds::play(dash::sounds::kWhoa, true);
       dash::character().react(dash::EyeState::Confused, 1500);
       break;
@@ -199,9 +216,9 @@ void onImuEvent(const dash::ImuEvent& e) {
                       dash::faceToString(e.oldFace),
                       dash::faceToString(e.newFace));
       // Curious "huh?" + surprised face whenever the cube gets rotated to
-      // a new face. Little robot noticing it's been moved. Skip during
-      // active sessions so it doesn't yelp every time you adjust the cube.
-      if (dash::stateMachine().state() != dash::DeviceState::InSession) {
+      // a new face. Skip during sessions / games / menus / diagnostic.
+      if (!silenced &&
+          dash::stateMachine().state() != dash::DeviceState::InSession) {
         dash::sounds::play(dash::sounds::kTilt, true);
         dash::character().react(dash::EyeState::Surprised, 1000);
       }
@@ -230,9 +247,9 @@ void onImuEvent(const dash::ImuEvent& e) {
         break;
       }
       // Inside a game, games::begin() listener picks the flick up to
-      // satisfy bop-it prompts — fall through to the ambient reaction
-      // only if there's no game running.
-      if (dash::games().current() == dash::GameId::None && !menu::active) {
+      // satisfy bop-it prompts. Skip the ambient boop when something
+      // else is using the input stream.
+      if (!silenced) {
         dash::sounds::play(dash::sounds::kBoop, true);
         dash::character().react(dash::EyeState::Surprised, 800);
       }
@@ -245,16 +262,19 @@ void onImuEvent(const dash::ImuEvent& e) {
 // DoubleTouch  → session toggle (just like onImuEvent::DoubleTap).
 // LongPress    → deep-sleep gesture (parallel to triple-tap).
 void onTouchEvent(const dash::TouchEvent& e) {
+  const bool silenced = ambientReactionsSilenced();
   switch (e.type) {
     case dash::TouchEventType::Touch:
       dash::log::info("Main", "touch raw=%u → tap", e.rawValue);
       dash::portal().recordDiagEvent("Touch");
+      if (silenced) break;
       dash::display().blink();
       dash::sounds::playTapAck();
       break;
     case dash::TouchEventType::DoubleTouch:
       dash::log::info("Main", "double-touch → session toggle");
       dash::portal().recordDiagEvent("TouchDouble");
+      if (silenced) break;
       if (dash::settings().onboarded()) {
         auto snap = dash::session().snapshot();
         if (snap.active) {

@@ -360,6 +360,21 @@ void Portal::begin() {
     sv->send(200, "application/json", "{\"ok\":true}");
   });
 
+  // diag.html toggles this to suppress main's normal tap / shake / flick
+  // reactions so they don't interfere with what the diagnostic is
+  // measuring. Auto-clears after 60s of no refresh.
+  sv->on("/api/diag-mode", HTTP_POST, [this, sv]() {
+    lastClientMs_ = millis();
+    if (!sv->hasArg("plain")) { sv->send(400, "text/plain", "no body"); return; }
+    JsonDocument doc;
+    if (deserializeJson(doc, sv->arg("plain"))) {
+      sv->send(400, "text/plain", "bad json"); return;
+    }
+    setDiagMode(doc["active"].as<bool>());
+    log::info(kTag, "diag mode %s", diagModeActive() ? "ON" : "OFF");
+    sv->send(200, "application/json", "{\"ok\":true}");
+  });
+
   // --- /api/test-tone (volume preview, diagnostic speaker test) ---
   sv->on("/api/test-tone", HTTP_POST, [this, sv]() {
     lastClientMs_ = millis();

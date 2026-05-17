@@ -36,10 +36,24 @@ class Portal {
   const char* lastDiagEvent() const { return lastDiagEvent_; }
   uint32_t lastDiagEventMs() const { return lastDiagEventMs_; }
 
+  // When the diagnostic page is open, the normal IMU/touch reactions
+  // (chirps, surprised eyes, session toggle) are suppressed so they
+  // don't interfere with what the diag is measuring. diag.html POSTs
+  // /api/diag-mode {active:true} on load and false on exit.
+  bool diagModeActive() const {
+    return diagModeOn_ && (millis() - diagModeMs_ < 60000);  // auto-clear after 60s
+  }
+  void setDiagMode(bool on) {
+    diagModeOn_ = on;
+    diagModeMs_ = millis();
+  }
+
  private:
   uint32_t lastClientMs_;
   char lastDiagEvent_[24];
   uint32_t lastDiagEventMs_;
+  bool     diagModeOn_ = false;
+  uint32_t diagModeMs_ = 0;
 };
 
 Portal& portal();

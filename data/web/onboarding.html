@@ -13,30 +13,29 @@
 <div class="shell">
   <header class="app-header">
     <div class="logo">Dash</div>
-    <div id="status-pill" class="status-pill busy">setting up</div>
+    <div id="status-pill" class="status-pill busy">getting set up</div>
   </header>
 
-  <!-- step indicator -->
   <div class="step-dots" id="dots" aria-hidden="true"></div>
 
-  <!-- step 1: welcome -->
+  <!-- step 0: welcome -->
   <section class="card hero step" data-step="0">
     <h2>Hi 👋</h2>
-    <p class="subtle">I'm Dash. I'll keep you company while you focus.<br>Three quick questions and we're off.</p>
+    <p class="subtle">I'm Dash. I'll keep you company while you focus. This walkthrough takes about a minute and covers every gesture, sound, and screen I'll throw at you.</p>
     <p class="subtle muted" style="margin-top: var(--s-3); font-size: var(--fs-xs)">
-      Tip: any time you want to reopen this page, you can browse to
-      <span class="text-accent">dash.local</span> or
-      <span class="text-accent">192.168.4.1</span> while connected to Dash's Wi-Fi.
+      Reopen this any time from
+      <span class="text-accent">dash.local</span> →
+      Settings → Replay welcome tutorial.
     </p>
     <div class="btn-row" style="margin-top: var(--s-3)">
       <button class="btn primary next">Let's go</button>
     </div>
   </section>
 
-  <!-- step 2: your name -->
+  <!-- step 1: your name -->
   <section class="card step" data-step="1" hidden>
     <h3>What's your name?</h3>
-    <p class="subtle">My name's Dash, but I'd love to know yours. I'll use your name for the Wi-Fi network so you can spot your cube quickly.</p>
+    <p class="subtle">My name's Dash, but I'd love to know yours. I'll use it to label the Wi-Fi network you connect to me with.</p>
     <label class="field">
       <span>Your name</span>
       <input id="ob-name" type="text" maxlength="16" placeholder="Dash">
@@ -47,36 +46,83 @@
     </div>
   </section>
 
-  <!-- step 3: gestures tutorial -->
+  <!-- step 2: the eyes -->
   <section class="card step" data-step="2" hidden>
-    <h3>Four gestures to know</h3>
-    <div class="col" style="gap: var(--s-2)">
+    <h3>I show how I feel with eyes</h3>
+    <p class="subtle">Look at my little OLED face. I'll glance around when idle, focus when you're working, look surprised when you tap me, and close my eyes when I'm sleepy.</p>
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
       <div class="settings-row">
-        <div class="label">
-          <span class="name">One tap</span>
-          <span class="hint">a friendly hello</span>
-        </div>
+        <div class="label"><span class="name">Idle</span><span class="hint">curious, looks around occasionally</span></div>
+        <span style="font-size:22px">👀</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Focused</span><span class="hint">narrow, intent — during a session</span></div>
+        <span style="font-size:22px">🎯</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Confused</span><span class="hint">when you shake me 😵</span></div>
+        <span style="font-size:22px">😵</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Sleepy</span><span class="hint">drowsy → asleep when idle too long</span></div>
+        <span style="font-size:22px">😴</span>
+      </div>
+    </div>
+    <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
+      My eyes also follow you — tilt me and watch where I look.
+    </p>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
+
+  <!-- step 3: taps -->
+  <section class="card step" data-step="3" hidden>
+    <h3>Taps on my head</h3>
+    <p class="subtle">Tap firmly on the top face — the touch pad. I count how many taps in a row.</p>
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
+      <div class="settings-row">
+        <div class="label"><span class="name">1 tap</span><span class="hint">friendly chirp — I noticed you</span></div>
         <span style="font-size:22px">👆</span>
       </div>
       <div class="settings-row">
-        <div class="label">
-          <span class="name">Double-tap</span>
-          <span class="hint">start a session · double-tap again to end it</span>
-        </div>
+        <div class="label"><span class="name">2 taps fast</span><span class="hint">start a focus session · double-tap again to stop</span></div>
         <span style="font-size:22px">✌️</span>
       </div>
       <div class="settings-row">
-        <div class="label">
-          <span class="name">Triple-tap</span>
-          <span class="hint">put me to sleep on command</span>
-        </div>
+        <div class="label"><span class="name">3 taps fast</span><span class="hint">put me to sleep</span></div>
         <span style="font-size:22px">😴</span>
       </div>
+    </div>
+    <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
+      A double-tap chime confirms the gesture landed. Tap timing is mouse-fast — under 300 ms between taps.
+    </p>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
+
+  <!-- step 4: flicks + shakes -->
+  <section class="card step" data-step="4" hidden>
+    <h3>Flicks &amp; shakes</h3>
+    <p class="subtle">Hold me firmly and jerk in a direction — that's a flick.</p>
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
       <div class="settings-row">
-        <div class="label">
-          <span class="name">Flip face-down</span>
-          <span class="hint">fast-path to sleep for the night</span>
-        </div>
+        <div class="label"><span class="name">Flick left / right</span><span class="hint">sideways flicks — used in games</span></div>
+        <span style="font-size:22px">↔️</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Flick forward</span><span class="hint">opens the games menu (touchless option)</span></div>
+        <span style="font-size:22px">⤴️</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Shake</span><span class="hint">"whoa!" — cycles menu items / Bop It action</span></div>
+        <span style="font-size:22px">〰️</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Flip me upside-down</span><span class="hint">held for 3 s → bedtime</span></div>
         <span style="font-size:22px">🔻</span>
       </div>
     </div>
@@ -86,10 +132,116 @@
     </div>
   </section>
 
-  <!-- step 4: home wifi -->
-  <section class="card step" data-step="3" hidden>
+  <!-- step 5: sessions -->
+  <section class="card step" data-step="5" hidden>
+    <h3>Focus sessions</h3>
+    <p class="subtle">A session is a timed focus block. While one runs, my eyes go focused and I track your progress.</p>
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
+      <div class="settings-row">
+        <div class="label"><span class="name">Start</span><span class="hint">double-tap me, or tap "Start session" in the app</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Halfway</span><span class="hint">I flash a quick happy face to encourage you</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Done</span><span class="hint">celebration animation + chime when the timer hits 0</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">End early</span><span class="hint">double-tap again or use "End early" in the app</span></div>
+      </div>
+    </div>
+    <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
+      Stats live on the Stats tab — total hours, current streak, recent sessions.
+    </p>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
+
+  <!-- step 6: games -->
+  <section class="card step" data-step="6" hidden>
+    <h3>Quick games</h3>
+    <p class="subtle">Two mini-games live on me. Two ways to open them:</p>
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
+      <div class="settings-row">
+        <div class="label">
+          <span class="name">Long-press my touch pad <span style="opacity:0.6">OR</span> flick me forward</span>
+          <span class="hint">opens the games menu on my screen</span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="label">
+          <span class="name">Shake</span>
+          <span class="hint">in the menu → next item</span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="label">
+          <span class="name">Tap</span>
+          <span class="hint">in the menu → select highlighted game</span>
+        </div>
+      </div>
+    </div>
+    <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
+      <b>Reaction</b>: wait for "GO!" and tap as fast as you can — 5 rounds.<br>
+      <b>Bop It</b>: I show TAP / ← / → / SHAKE — you've got a shrinking window to obey.
+    </p>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
+
+  <!-- step 7: sleep / wake -->
+  <section class="card step" data-step="7" hidden>
+    <h3>Sleep &amp; wake</h3>
+    <p class="subtle">If you leave me alone for ~3 minutes my eyes droop and I doze off to save power.</p>
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
+      <div class="settings-row">
+        <div class="label"><span class="name">Auto-sleep</span><span class="hint">drowsy → asleep after the configured timeout</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Sleep on demand</span><span class="hint">triple-tap, or flip me face-down for 3 s</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Wake me</span><span class="hint">touch the pad, or pick me up</span></div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
+
+  <!-- step 8: settings tour -->
+  <section class="card step" data-step="8" hidden>
+    <h3>Things you can change</h3>
+    <p class="subtle">The Settings tab has everything tweakable:</p>
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
+      <div class="settings-row">
+        <div class="label"><span class="name">Your name + volume</span><span class="hint">at the top of Settings</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Session length / sleep timeout / tap sensitivity</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Theme</span><span class="hint">warm / calm / cool / dusk</span></div>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Replay tutorial</span><span class="hint">re-open this manual any time</span></div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn ghost prev">Back</button>
+      <button class="btn primary next">Next</button>
+    </div>
+  </section>
+
+  <!-- step 9: home wifi (optional) -->
+  <section class="card step" data-step="9" hidden>
     <h3>Home Wi-Fi (optional)</h3>
-    <p class="subtle">I'll use this to grab updates while you're asleep. Skip if you'd rather set this up later.</p>
+    <p class="subtle">I'll use this to download firmware updates while you're asleep. Skip if you'd rather set it up later in Settings.</p>
     <label class="field">
       <span>Network name</span>
       <input id="ob-ssid" type="text" maxlength="32">
@@ -104,10 +256,13 @@
     </div>
   </section>
 
-  <!-- step 5: done -->
-  <section class="card step" data-step="4" hidden>
-    <h3>All set</h3>
-    <p class="subtle">Tap the home screen Start button to begin your first focus session.<br>Or double-tap me directly.</p>
+  <!-- step 10: done -->
+  <section class="card step" data-step="10" hidden>
+    <h3>You're set 🎉</h3>
+    <p class="subtle">Try it now: <b>double-tap me</b> to start your first focus session, or <b>flick me forward</b> for the games menu.</p>
+    <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
+      Need this list again? Settings → Replay welcome tutorial.
+    </p>
     <div class="btn-row">
       <button class="btn primary" id="btn-finish">Take me home</button>
     </div>
@@ -138,6 +293,7 @@ function show(n) {
   step = Math.max(0, Math.min(total - 1, n));
   $$(".step").forEach((el, i) => el.hidden = (i !== step));
   renderDots();
+  window.scrollTo({top: 0, behavior: "smooth"});
 }
 
 function bind() {

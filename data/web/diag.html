@@ -244,7 +244,19 @@ function record(id, result, detail) {
 function next() { cur++; renderStep(); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+async function setDiagMode(on) {
+  try {
+    await api("/api/diag-mode", { method: "POST", body: JSON.stringify({active: !!on}) });
+  } catch (e) {}
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  // Suppress Dash's normal reactions (chirps, session toggle, etc.) while
+  // the diag is running. Renewed every 30 s in case the diag drags on.
+  setDiagMode(true);
+  setInterval(() => setDiagMode(true), 30000);
+  window.addEventListener("pagehide", () => setDiagMode(false));
+  window.addEventListener("beforeunload", () => setDiagMode(false));
   $("btn-skip").addEventListener("click", () => {
     clearRepeat();
     record(steps[cur].id, "fail", "skipped");

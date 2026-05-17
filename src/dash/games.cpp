@@ -33,9 +33,15 @@ Games::Games()
       actionMs_(0), actionConsumed_(true), expectedAction_(0) {}
 
 void Games::begin() {
+  // Event-level matching catches the clean cases:
+  //   TAP prompt   ← Tap event
+  //   SHAKE prompt ← Shake event
+  // But flicks often misclassify as Tap (because the user's flick has a
+  // big Z component too) — for those the per-frame raw-sample polling
+  // in runBopIt() does a loose direction check that catches "intent" even
+  // when the firmware-level Flick discriminator rejects the impulse.
   imu().onEvent([this](const ImuEvent& e) {
     if (current_ == GameId::None) return;
-    // 0 = TAP, 1 = flick left, 2 = flick right, 3 = SHAKE.
     if (e.type == ImuEventType::Tap && expectedAction_ == 0) {
       actionConsumed_ = true;
     } else if (e.type == ImuEventType::Flick) {
@@ -142,8 +148,35 @@ void Games::runBopIt() {
     }
     audio().play(sounds::kMenuBlip);
 
+    // Loose intent-based detection: poll the raw IMU samples at 100 Hz
+    // and accept any spike with the right direction component. Means
+    // the user just needs to move the cube the right way — they don't
+    // need to satisfy the strict Tap / Flick discriminator that often
+    // rejects oblique impulses.
+    constexpr float kMoveThreshold     = 0.40f;  // |linear accel| g
+    constexpr float kDirComponentMin   = 0.25f;  // axis-of-interest g
     uint32_t deadline = millis() + window;
-    while (!actionConsumed_ && millis() < deadline) delay(5);
+    while (!actionConsumed_ && millis() < deadline) {
+      auto s = imu().latest();
+      float linMag = sqrtf(s.ax * s.ax + s.ay * s.ay + s.az * s.az);
+      if (linMag > kMoveThreshold) {
+        switch (action) {
+          case 0:  // TAP — body-Z dominant
+            if (fabsf(s.az) > kDirComponentMin) actionConsumed_ = true;
+            break;
+          case 1:  // ← (left)  → +Y component (per calibration)
+            if (s.ay >  kDirComponentMin) actionConsumed_ = true;
+            break;
+          case 2:  // → (right) → -Y component
+            if (s.ay < -kDirComponentMin) actionConsumed_ = true;
+            break;
+          case 3:  // SHAKE — strong motion in any direction, ignore axis
+            if (linMag > 1.0f) actionConsumed_ = true;
+            break;
+        }
+      }
+      delay(8);
+    }
     if (!actionConsumed_) {
       audio().play(sounds::kGameWrong);
       display().showInverted("MISS");

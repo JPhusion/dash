@@ -38,7 +38,7 @@ constexpr uint32_t kStationaryHoldMs = 5000;
 //   3rd tap before that resets the timer and we commit as TripleTap
 //   at +220ms after the 3rd.
 constexpr uint32_t kTapRefractoryMs     = 25;
-constexpr uint32_t kTapChainCommitMs    = 220;
+constexpr uint32_t kTapChainCommitMs    = 180;   // tighter: 220 → 180
 constexpr uint32_t kShakeRefractoryMs   = 1500;
 
 Imu* g_singleton = nullptr;
@@ -384,9 +384,12 @@ void Imu::sampleLoop() {
       float effThreshold = tapThreshold_;
       if (touch().isTouched()) effThreshold *= 0.6f;
 
-      // Body-Z axis dominance of the linear-accel vector. Body-Z is
-      // perpendicular to the cap-pad face, so any deliberate tap on
-      // that face spikes mostly along Z regardless of cube orientation.
+      // Body-Z axis dominance — used for the FIRST tap of a chain to
+      // discriminate from horizontal shakes. Once we're inside a chain
+      // (the 1st tap already fired), this check is dropped: we already
+      // know the user is tapping the cube, so subsequent impulses count
+      // even if they're slightly off-axis. This makes fast double-taps
+      // detect reliably even when the user's taps are oblique.
       float zAlign = (linMag > 0.001f) ? fabsf(laz) / linMag : 0.0f;
       const bool alongZ        = (zAlign > 0.55f);
 
@@ -398,10 +401,16 @@ void Imu::sampleLoop() {
       bool fire = false;
       if (linMag > effThreshold &&
           nowMs > tapCooldownUntilMs_ &&
-          !inShakeWindow &&
-          alongZ &&
-          (inTapChain || prevQuiet)) {
-        fire = true;
+          !inShakeWindow) {
+        if (inTapChain) {
+          // Already in a chain — any impulse past the refractory window
+          // counts as the next tap. No direction / prev-quiet gating.
+          fire = true;
+        } else if (alongZ && prevQuiet) {
+          // First tap of a new chain — strict discrimination so a shake
+          // doesn't start a tap chain.
+          fire = true;
+        }
       }
 
       // Directional flick: a spike NOT along body-Z (so not a tap) but in
