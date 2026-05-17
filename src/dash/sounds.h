@@ -38,10 +38,11 @@ inline bool play(const char* path, bool exclusive = false) {
   return dash::audio().play(path, dash::AudioFormat::Pcm8kHzMono8, exclusive);
 }
 
-// Pick a random tap-ack variant so rapid tapping doesn't sound robotic.
+// Consistent touch acknowledgement — always the same chirp so users can
+// learn the sound and trust it. (We used to randomise across three
+// variants, but consistency turned out to matter more than variety here.)
 inline bool playTapAck() {
-  static const char* kTapAcks[] = { kTapAck, kTapAck2, kTapAck3 };
-  return play(kTapAcks[esp_random() % 3]);
+  return play(kTapAck);
 }
 
 }  // namespace dash::sounds

@@ -284,11 +284,43 @@ SOUNDS: Dict[str, Callable[[], np.ndarray]] = {
 }
 
 
+def reverb(buf: np.ndarray, dry: float = 0.7, wet: float = 0.4) -> np.ndarray:
+    """Lightweight algorithmic reverb — a few decaying taps mixed with the
+    dry signal. Gives Dash's chimes a softer, more "real-room" tail without
+    sounding washed-out. Tuned for 8 kHz, mono.
+
+    Tap delays were picked so they don't fall on integer multiples of one
+    another (which would produce ringing on tonal sounds); amplitudes decay
+    geometrically.
+    """
+    delays_ms = [27, 53, 89, 137]
+    amps      = [0.35, 0.24, 0.16, 0.10]
+    n = len(buf)
+    # Output buffer is long enough to hold the longest tail.
+    tail = int(0.25 * SAMPLE_RATE)
+    out = np.zeros(n + tail, dtype=np.float32)
+    out[:n] = buf * dry
+    for d_ms, amp in zip(delays_ms, amps):
+        d = int(d_ms * SAMPLE_RATE / 1000)
+        if d < n + tail - 1:
+            out[d:d + n] += buf * (amp * wet)
+    # Re-normalise so we don't clip after summing wet copies.
+    peak = float(np.max(np.abs(out)) or 1.0)
+    if peak > 0.95:
+        out *= 0.95 / peak
+    return out.astype(np.float32)
+
+
 def to_u8_pcm(buf: np.ndarray) -> bytes:
     """Convert float32 [-1, 1] to u8 (offset-binary, 128 = silence)."""
     clipped = np.clip(buf, -1.0, 1.0)
     u8 = ((clipped * 127.0) + 128.0).astype(np.uint8)
     return u8.tobytes()
+
+
+# Sounds that shouldn't get reverb — short clicks where a tail would smear
+# rapid repeats (e.g. tap_ack played on every cube tap, menu_blip etc).
+DRY_SOUNDS = {"tap_ack", "tap_ack_2", "tap_ack_3", "menu_blip"}
 
 
 def main() -> None:
@@ -298,14 +330,18 @@ def main() -> None:
     for name, gen in sorted(SOUNDS.items()):
         np.random.seed(hash(name) & 0xFFFFFFFF)
         buf = gen()
+        if name not in DRY_SOUNDS:
+            buf = reverb(buf)
         data = to_u8_pcm(buf)
         out_path = OUT / f"{name}.raw"
         out_path.write_bytes(data)
         ms = 1000.0 * len(buf) / SAMPLE_RATE
         total_bytes += len(data)
-        print(f"  {name:20s}  {ms:6.0f} ms  {len(data):6d} bytes -> {out_path.name}")
+        tag = " " if name in DRY_SOUNDS else "~"
+        print(f"  {name:20s}{tag} {ms:6.0f} ms  {len(data):6d} bytes -> {out_path.name}")
     print(f"\ntotal: {total_bytes} bytes "
           f"({total_bytes/1024:.1f} KiB at {SAMPLE_RATE} Hz mono u8)")
+    print("(~ = with reverb tail)")
 
 
 if __name__ == "__main__":
