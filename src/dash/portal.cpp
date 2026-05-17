@@ -112,12 +112,13 @@ void Portal::begin() {
     snprintf(buf, sizeof(buf),
              "{\"firmware\":\"%s\",\"state\":\"%s\",\"mood\":%d,"
              "\"face\":\"%s\",\"uptime_ms\":%lu,\"boot_count\":%u,"
-             "\"name\":\"%s\"}",
+             "\"name\":\"Dash\",\"user_name\":\"%s\",\"ssid\":\"%s\"}",
              kFirmwareVersion, deviceStateName(sm.state()),
              (int)character().mood(),
              faceToString(imu().currentFace()),
              (unsigned long)millis(), (unsigned)power().bootCount(),
-             settings().deviceName().c_str());
+             settings().userName().c_str(),
+             wifiAp().ssid().c_str());
     sv->send(200, "application/json", buf);
   });
 
@@ -142,15 +143,17 @@ void Portal::begin() {
   // --- /api/config GET/POST ---
   sv->on("/api/config", HTTP_GET, [this, sv]() {
     lastClientMs_ = millis();
-    char buf[320];
+    char buf[360];
     snprintf(buf, sizeof(buf),
-             "{\"name\":\"%s\",\"volume\":%u,\"sleep_timeout_s\":%u,"
-             "\"session_minutes\":%u,\"tap_g\":%.2f,\"onboarded\":%s}",
-             settings().deviceName().c_str(),
+             "{\"user_name\":\"%s\",\"volume\":%u,\"sleep_timeout_s\":%u,"
+             "\"session_minutes\":%u,\"tap_g\":%.2f,"
+             "\"ssid\":\"%s\",\"onboarded\":%s}",
+             settings().userName().c_str(),
              settings().audioVolume(),
              settings().sleepTimeoutSec(),
              settings().sessionLengthMin(),
              settings().tapSensitivityG(),
+             wifiAp().ssid().c_str(),
              settings().onboarded() ? "true" : "false");
     sv->send(200, "application/json", buf);
   });
@@ -161,8 +164,8 @@ void Portal::begin() {
     JsonDocument doc;
     auto err = deserializeJson(doc, sv->arg("plain"));
     if (err) { sv->send(400, "text/plain", "bad json"); return; }
-    if (doc["name"].is<const char*>()) {
-      settings().setDeviceName(doc["name"].as<String>());
+    if (doc["user_name"].is<const char*>()) {
+      settings().setUserName(doc["user_name"].as<String>());
     }
     if (doc["volume"].is<unsigned>()) {
       settings().setAudioVolume((uint8_t)(doc["volume"].as<unsigned>()));
@@ -258,9 +261,9 @@ void Portal::begin() {
     lastClientMs_ = millis();
     char buf[160];
     snprintf(buf, sizeof(buf),
-             "{\"onboarded\":%s,\"name\":\"%s\",\"home_wifi_set\":%s}",
+             "{\"onboarded\":%s,\"user_name\":\"%s\",\"home_wifi_set\":%s}",
              settings().onboarded() ? "true" : "false",
-             settings().deviceName().c_str(),
+             settings().userName().c_str(),
              settings().homeWifiSsid().length() > 0 ? "true" : "false");
     sv->send(200, "application/json", buf);
   });
@@ -271,8 +274,8 @@ void Portal::begin() {
     JsonDocument doc;
     auto err = deserializeJson(doc, sv->arg("plain"));
     if (err) { sv->send(400, "text/plain", "bad json"); return; }
-    if (doc["name"].is<const char*>()) {
-      settings().setDeviceName(doc["name"].as<String>());
+    if (doc["user_name"].is<const char*>()) {
+      settings().setUserName(doc["user_name"].as<String>());
     }
     if (doc["home_ssid"].is<const char*>()) {
       settings().setHomeWifiSsid(doc["home_ssid"].as<String>());

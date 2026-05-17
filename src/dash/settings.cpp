@@ -29,19 +29,21 @@ bool Settings::begin() {
   return true;
 }
 
-String Settings::deviceName() {
+String Settings::userName() {
   p_.begin(kNs, true);
-  String s = p_.getString("name", "Dash");
+  String s = p_.getString("user", "");
   p_.end();
   return s;
 }
-void Settings::setDeviceName(const String& s) {
-  p_.begin(kNs, false); p_.putString("name", s); p_.end();
+void Settings::setUserName(const String& s) {
+  p_.begin(kNs, false); p_.putString("user", s); p_.end();
 }
 
 uint8_t Settings::audioVolume() {
   p_.begin(kNs, true);
-  uint8_t v = p_.getUChar("vol", 60);
+  // 35 default — at 60 the I2S amp clips on percussive sounds
+  // (boot chime, milestone fanfare).
+  uint8_t v = p_.getUChar("vol", 35);
   p_.end();
   return v;
 }

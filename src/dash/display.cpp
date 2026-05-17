@@ -237,17 +237,24 @@ void Display::renderTaskLoop() {
       }
       u8g2.sendBuffer();
     } else {
-      // Normal eye render path.
+      // Normal eye render path. For Progress overlay we have the eye lib
+      // skip its own sendBuffer (DeferSend=true), composite the progress
+      // bar onto the same buffer, and send once. Without this the user
+      // sees a flicker because the bar is drawn AFTER the eye lib already
+      // sent a frame without it.
+      const bool progressOverlay = (overlay == Overlay::Progress);
+      g_face->DeferSend = progressOverlay;
       g_face->Update();
-      if (overlay == Overlay::Progress) {
-        // Draw a 4px bar at the bottom on top of the eye buffer. The eye lib
-        // just called sendBuffer() so we redraw the bottom 4 rows.
+      if (progressOverlay) {
         u8g2.setDrawColor(0);
         u8g2.drawBox(0, 60, kScreenWidth, 4);
         u8g2.setDrawColor(1);
-        int filled = (pct * kScreenWidth) / 100;
-        u8g2.drawBox(0, 60, filled, 4);
+        // Outline + fill so the bar is visible at any percentage.
+        u8g2.drawFrame(0, 60, kScreenWidth, 4);
+        int filled = (pct * (kScreenWidth - 2)) / 100;
+        u8g2.drawBox(1, 61, filled, 2);
         u8g2.sendBuffer();
+        g_face->DeferSend = false;
       }
     }
 

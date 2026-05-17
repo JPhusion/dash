@@ -43,6 +43,13 @@ class Character {
   // splash; just blinks awake and settles.
   void playWakeAnimation();
 
+  // Deliberate "going to sleep" animation — yawn, look down, eyes close,
+  // hold. Used before deep sleep entry so the user sees Dash settle.
+  void playSleepAnimation();
+
+  // Session-start celebration: brief look-around then settle into focused.
+  void playSessionStartAnimation();
+
   // Time-aware greeting (good morning / hello / good evening) — call after a
   // session starts or after a deep-sleep wake. Falls through cleanly if the
   // wall clock hasn't been synced yet.

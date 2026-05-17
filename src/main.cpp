@@ -60,9 +60,8 @@ void onImuEvent(const dash::ImuEvent& e) {
       break;
     case ImuEventType::TripleTap:
       dash::log::info("Main", "triple-tap (deep-sleep gesture)");
-      dash::character().react(dash::EyeState::Sleepy, 600);
       dash::sounds::play(dash::sounds::kSleep);
-      delay(500);
+      dash::character().playSleepAnimation();
       dash::power().enterDeepSleep(0);
       break;
     case ImuEventType::Shake:
@@ -73,7 +72,12 @@ void onImuEvent(const dash::ImuEvent& e) {
       dash::log::info("Main", "face: %s -> %s",
                       dash::faceToString(e.oldFace),
                       dash::faceToString(e.newFace));
-      if (e.newFace == dash::Face::Down) {
+      // "Flipped to sleep" gesture: any orientation other than Up (the
+      // natural sitting-on-the-desk orientation) held for >3s triggers
+      // sleep. Robust to which body axis the IMU thinks is "down" — we
+      // just detect "not in the usual orientation" rather than guessing
+      // which face has the OLED.
+      if (e.newFace != dash::Face::Up && e.newFace != dash::Face::Unknown) {
         g_faceDownSinceMs = millis();
       } else {
         g_faceDownSinceMs = 0;
@@ -204,12 +208,16 @@ void setup() {
 void loop() {
   const uint32_t now = millis();
 
-  // Face-down fast-path to sleep (cube flipped face-down for >2s).
-  if (g_faceDownSinceMs != 0 && (now - g_faceDownSinceMs) > 2000) {
-    dash::log::info("Main", "face-down > 2s -> deep sleep");
+  // Flip-to-sleep gesture: cube held in any non-Up orientation for >3s.
+  // Skip while a session is running so the user can pick the cube up
+  // without accidentally sleeping mid-focus.
+  if (g_faceDownSinceMs != 0 && (now - g_faceDownSinceMs) > 3000 &&
+      dash::stateMachine().state() != dash::DeviceState::InSession) {
+    dash::log::info("Main", "flip-to-sleep gesture -> sleep");
     g_faceDownSinceMs = 0;
-    dash::display().setEyeState(dash::EyeState::Sleepy);
-    delay(500);
+    dash::character().playSleepAnimation();
+    dash::sounds::play(dash::sounds::kSleep);
+    delay(1200);
     dash::power().enterDeepSleep(0);
   }
 

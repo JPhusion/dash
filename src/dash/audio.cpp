@@ -53,7 +53,7 @@ Audio::Audio()
       running_(false),
       playing_(false),
       cancel_(false),
-      volume_(60),     // medium default
+      volume_(35),     // softer default — 60 clips on percussive sounds
       silent_(false) {}
 
 bool Audio::begin() {

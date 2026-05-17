@@ -58,6 +58,7 @@ Imu::Imu()
       doubleTapWindowMs_(400),
       tripleTapWindowMs_(600),
       lastTapMs_(0), tapCount_(0), firstTapMs_(0), tapCooldownUntilMs_(0),
+      lastLinMag_(0.0f),
       shakeVariance_(0.6f),
       varianceIndex_(0),
       lastShakeMs_(0),
@@ -316,11 +317,43 @@ void Imu::sampleLoop() {
       latest_ = snap;
       xSemaphoreGive(mutex_);
 
-      // Tap detection — peak detector with refractory.
+      // ---- Shake detection (runs first so taps can be suppressed during
+      // sustained motion / shaking). Running variance of linear-accel
+      // magnitude over 16 samples (~160ms at 100Hz).
       uint32_t nowMs = millis();
-      if (linMag > tapThreshold_ && nowMs > tapCooldownUntilMs_) {
+      varianceWindow_[varianceIndex_ % 16] = linMag;
+      varianceIndex_++;
+      float runningVar = 0;
+      if (varianceIndex_ >= 16) {
+        float mean = 0;
+        for (auto v : varianceWindow_) mean += v;
+        mean /= 16.0f;
+        for (auto v : varianceWindow_) runningVar += (v - mean) * (v - mean);
+        runningVar /= 16.0f;
+        if (runningVar > shakeVariance_ && nowMs - lastShakeMs_ > kShakeRefractoryMs) {
+          lastShakeMs_ = nowMs;
+          emit({ImuEventType::Shake, currentFace_, currentFace_, sqrtf(runningVar), 0});
+        }
+      }
+
+      // ---- Tap detection. A real finger tap has a distinctive signature:
+      // a brief quiet period followed by a sharp spike. Sustained motion
+      // (shake / hand-held / sliding the cube) keeps linMag elevated and
+      // therefore lacks the preceding quiet — those should NOT be taps.
+      //
+      // Rules:
+      //   1. Previous sample (10ms ago) was below tapThreshold * 0.4 — proof
+      //      we were actually quiet immediately before this spike.
+      //   2. Variance over the last ~160ms is also low (variance < shake/3) —
+      //      proof there isn't a shake-burst around this spike.
+      //   3. Refractory window of kTapRefractoryMs after a fire.
+      const bool prevQuiet      = (lastLinMag_ < tapThreshold_ * 0.4f);
+      const bool varianceQuiet  = (runningVar < shakeVariance_ * 0.33f);
+      const bool inShakeWindow  = (nowMs - lastShakeMs_) < 500;
+      if (linMag > tapThreshold_ &&
+          nowMs > tapCooldownUntilMs_ &&
+          prevQuiet && varianceQuiet && !inShakeWindow) {
         tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
-        // Sequence logic.
         if (tapCount_ == 0 || (nowMs - lastTapMs_) > tripleTapWindowMs_) {
           tapCount_ = 1;
           firstTapMs_ = nowMs;
@@ -328,25 +361,9 @@ void Imu::sampleLoop() {
           tapCount_++;
         }
         lastTapMs_ = nowMs;
-        // Emit immediately for tap; double/triple are emitted on window expiry.
         emit({ImuEventType::Tap, currentFace_, currentFace_, linMag, 0});
       }
-
-      // Shake detection via running variance of linear-accel magnitude.
-      varianceWindow_[varianceIndex_ % 16] = linMag;
-      varianceIndex_++;
-      if (varianceIndex_ >= 16 && nowMs - lastShakeMs_ > kShakeRefractoryMs) {
-        float mean = 0;
-        for (auto v : varianceWindow_) mean += v;
-        mean /= 16.0f;
-        float var = 0;
-        for (auto v : varianceWindow_) var += (v - mean) * (v - mean);
-        var /= 16.0f;
-        if (var > shakeVariance_) {
-          lastShakeMs_ = nowMs;
-          emit({ImuEventType::Shake, currentFace_, currentFace_, sqrtf(var), 0});
-        }
-      }
+      lastLinMag_ = linMag;
 
       // Face / orientation detection with hysteresis.
       Face f = dominantFace(grx, gry, grz);

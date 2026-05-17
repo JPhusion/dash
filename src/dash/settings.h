@@ -18,9 +18,16 @@ class Settings {
 
   bool begin();
 
-  // Dash device name (displayed on captive portal). Default "Dash".
-  String deviceName();
-  void setDeviceName(const String& name);
+  // Dash device name — for marketing reasons this stays "Dash" always.
+  // Kept as a getter so callers don't have to know that.
+  String deviceName() { return String("Dash"); }
+  void setDeviceName(const String& /*name*/) { /* no-op, see ADR */ }
+
+  // The user's name — used to personalise the AP SSID ("Josh's Dash") and
+  // optionally the portal greeting. Empty string means "not yet provided"
+  // and the SSID falls back to "Dash-XXXX".
+  String userName();
+  void setUserName(const String& name);
 
   // Audio volume 0-100. Default 60.
   uint8_t audioVolume();

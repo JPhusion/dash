@@ -121,6 +121,7 @@ class Imu {
   uint8_t tapCount_;
   uint32_t firstTapMs_;
   uint32_t tapCooldownUntilMs_;
+  float lastLinMag_;            // previous-sample magnitude for quiet-before-spike test
 
   // Shake state.
   float shakeVariance_;

@@ -33,13 +33,13 @@
     </div>
   </section>
 
-  <!-- step 2: name -->
+  <!-- step 2: your name -->
   <section class="card step" data-step="1" hidden>
-    <h3>What should I be called?</h3>
-    <p class="subtle">Doesn't have to be "Dash". Pick whatever feels right.</p>
+    <h3>What's your name?</h3>
+    <p class="subtle">My name's Dash, but I'd love to know yours. I'll use your name for the Wi-Fi network so you can spot your cube quickly.</p>
     <label class="field">
-      <span>Name</span>
-      <input id="ob-name" type="text" maxlength="16" placeholder="Dash">
+      <span>Your name</span>
+      <input id="ob-name" type="text" maxlength="16" placeholder="Josh">
     </label>
     <div class="btn-row">
       <button class="btn ghost prev">Back</button>
@@ -157,7 +157,7 @@ function toast(msg, kind = "") {
 
 async function finish() {
   const body = {
-    name: $("ob-name").value || "Dash",
+    user_name: $("ob-name").value || "",
     home_ssid: $("ob-ssid").value || "",
     home_password: $("ob-pass").value || "",
     complete: true,

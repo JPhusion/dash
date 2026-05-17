@@ -49,6 +49,11 @@ public:
     bool RandomLook = true;
     bool RandomBlink = true;
 
+    // When true, Draw() updates the u8g2 buffer but does NOT call sendBuffer.
+    // Useful when a caller wants to overlay extra graphics (e.g. a progress
+    // bar) and only send once per frame.
+    bool DeferSend = false;
+
     void LookLeft();
     void LookRight();
     void LookFront();
@@ -56,7 +61,8 @@ public:
     void LookBottom();
     void Wait(unsigned long milliseconds);
 
-protected:
+    // Public so callers can re-render without re-running animation logic
+    // (useful for overlay flicker fix).
     void Draw();
 };
 

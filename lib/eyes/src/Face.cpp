@@ -89,6 +89,7 @@ void Face::Draw() {
 	RightEye.CenterX = CenterX + EyeSize / 2 + EyeInterDistance;
 	RightEye.CenterY = CenterY;
 	RightEye.Draw();
-  // Transfer the redrawn buffer to the display
-  u8g2.sendBuffer();
+  // Transfer the redrawn buffer — unless DeferSend is set, in which case
+  // the caller will overlay graphics on the buffer and send themselves.
+  if (!DeferSend) u8g2.sendBuffer();
 }

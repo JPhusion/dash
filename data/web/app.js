@@ -93,7 +93,9 @@ async function refreshStatus() {
   try {
     state.status = await api("/api/status");
     setPill("ok", state.status.state);
-    $("device-name").textContent = state.status.name || "Dash";
+    // Hero card always shows "Dash" (marketing). Personalise via user name.
+    const userName = state.status.user_name || "";
+    $("device-name").textContent = userName ? `Hi ${userName}` : "Dash";
     const m = state.status.mood;
     $("mood-text").textContent =
       describeStatusLine(state.status);
@@ -124,7 +126,7 @@ async function refreshConfig() {
   try {
     state.config = await api("/api/config");
     const c = state.config;
-    $("cfg-name").value = c.name || "";
+    $("cfg-name").value = c.user_name || "";
     $("cfg-volume").value = c.volume ?? 60;
     $("vol-label").textContent = c.volume ?? 60;
     $("cfg-sleep-min").value = Math.round((c.sleep_timeout_s || 180) / 60);
@@ -370,7 +372,7 @@ async function pauseOrResumeSession() {
 
 async function saveConfig() {
   const body = {
-    name: $("cfg-name").value || "Dash",
+    user_name: $("cfg-name").value || "",
     volume: Number($("cfg-volume").value),
     sleep_timeout_s: Number($("cfg-sleep-min").value || 3) * 60,
     session_minutes: Number($("cfg-session-min").value || 25),

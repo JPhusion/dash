@@ -5,6 +5,7 @@
 #include <esp_wifi.h>
 
 #include "dash/log.h"
+#include "dash/settings.h"
 
 namespace dash {
 
@@ -23,12 +24,19 @@ bool WifiAp::start() {
 
   WiFi.mode(WIFI_AP);
 
-  // Build SSID from MAC.
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
-  char buf[32];
-  snprintf(buf, sizeof(buf), "Dash-%02X%02X", mac[4], mac[5]);
-  ssid_ = String(buf);
+  // SSID = "{user}'s Dash" if the user provided a name during onboarding;
+  // otherwise fall back to a MAC-suffixed Dash-XXXX so multiple cubes in
+  // the same room don't collide.
+  String user = settings().userName();
+  if (user.length() > 0) {
+    ssid_ = user + "'s Dash";
+  } else {
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "Dash-%02X%02X", mac[4], mac[5]);
+    ssid_ = String(buf);
+  }
 
   apIp_ = IPAddress(192, 168, 4, 1);
   IPAddress gateway = apIp_;

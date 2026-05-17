@@ -25,30 +25,68 @@ void Character::start() {
 void Character::stop() { running_ = false; }
 
 void Character::playBootAnimation() {
-  // Splash → blink → look around → settle.
-  display().showBootSplash();
-  delay(700);
+  // Eyes opening: asleep → sleepy (slits) → blink twice → look around
+  // → settle. Skips the splash text — the eyes themselves are the brand.
   display().clearOverlay();
-  display().setEyeState(EyeState::Surprised);
-  delay(350);
-  display().setEyeState(EyeState::Searching);
+  display().setEyeState(EyeState::Asleep);
   delay(450);
+  display().setEyeState(EyeState::Sleepy);
+  delay(300);
   display().blink();
-  delay(200);
+  delay(250);
+  display().setEyeState(EyeState::Surprised);
+  delay(280);
+  display().setEyeState(EyeState::Searching);
+  delay(420);
+  display().blink();
+  delay(180);
   display().setEyeState(restingEyeState());
   log::info(kTag, "boot animation done");
 }
 
 void Character::playWakeAnimation() {
-  // Wake-from-sleep is short: closed-eyes → blink twice → settle.
+  // Wake-from-deep-sleep is shorter than boot but uses the same opening
+  // motion so the user sees the same "eyes coming open" feel.
+  display().clearOverlay();
   display().setEyeState(EyeState::Asleep);
-  delay(200);
+  delay(220);
   display().setEyeState(EyeState::Sleepy);
-  delay(250);
+  delay(220);
   display().blink();
   delay(150);
   display().setEyeState(restingEyeState());
   log::info(kTag, "wake animation done");
+}
+
+void Character::playSleepAnimation() {
+  // Going-to-sleep sequence — yawn (look up briefly), then down, then
+  // eyes close. Holds the closed-eyes state for a moment so the user
+  // feels the transition land before the deep-sleep cut.
+  display().clearOverlay();
+  display().setEyeState(EyeState::Surprised);
+  delay(300);                                  // yawn — eyes open wide briefly
+  display().setEyeState(EyeState::Sleepy);
+  delay(500);
+  display().blink();
+  delay(220);
+  display().setEyeState(EyeState::Sleepy);
+  delay(300);
+  display().setEyeState(EyeState::Asleep);
+  delay(500);                                   // hold "asleep" before sleep entry
+  log::info(kTag, "sleep animation done");
+}
+
+void Character::playSessionStartAnimation() {
+  // Quick "alright, let's go" — wide eyes, glance, settle to focused.
+  display().clearOverlay();
+  display().setEyeState(EyeState::Surprised);
+  delay(250);
+  display().setEyeState(EyeState::Searching);
+  delay(300);
+  display().blink();
+  delay(150);
+  display().setEyeState(EyeState::Focused);
+  log::info(kTag, "session start animation done");
 }
 
 void Character::react(EyeState state, uint32_t hold_ms) {
