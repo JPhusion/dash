@@ -79,6 +79,10 @@ void Touch::recalibrate() {
   }
 }
 
+void Touch::injectEvent(TouchEvent e) {
+  emit(e);
+}
+
 void Touch::emit(TouchEvent e) {
   e.millis_ts = millis();
   for (uint8_t i = 0; i < listenerCount_; i++) listeners_[i](e);

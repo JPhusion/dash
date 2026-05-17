@@ -12,6 +12,7 @@
 #include "dash/audio.h"
 #include "dash/build_info.h"
 #include "dash/character.h"
+#include "dash/debug_cli.h"
 #include "dash/display.h"
 #include "dash/games.h"
 #include "dash/idle_manager.h"
@@ -252,6 +253,11 @@ void setup() {
   if (!dash::settings().onboarded()) {
     dash::display().showText("Connect to:", dash::wifiAp().ssid().c_str());
   }
+
+  // Debug CLI on serial. Type 'help' for the command list, 'selftest' to
+  // run the automated walkthrough.
+  dash::debugCli().begin();
+  dash::debugCli().start();
 
   dash::log::info("Main", "setup complete");
 }

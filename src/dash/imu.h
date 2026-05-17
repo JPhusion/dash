@@ -84,6 +84,12 @@ class Imu {
   void loadBiasFromNvs();
   void saveBiasToNvs() const;
 
+  // Test hook: inject a synthetic event into the dispatch queue, bypassing
+  // the sampling loop. Used by the serial CLI / self-test runner so the
+  // full event pipeline (listeners, double-tap state machine, etc.) can be
+  // exercised without physical motion.
+  void injectEvent(ImuEvent e);
+
  private:
   static void sampleTaskTrampoline(void* arg);
   static void eventTaskTrampoline(void* arg);

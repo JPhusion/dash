@@ -58,6 +58,10 @@ class Touch {
   // the pad while tapping the cube counts as a deliberate input).
   bool isTouched() const { return wasTouched_; }
 
+  // Test hook: synthesise a touch event without the cap pad. Used by the
+  // serial CLI / self-test runner.
+  void injectEvent(TouchEvent e);
+
  private:
   static void taskTrampoline(void* arg);
   void loop();

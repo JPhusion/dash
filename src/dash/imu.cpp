@@ -258,6 +258,10 @@ bool Imu::readSensors(float& ax, float& ay, float& az,
   return true;
 }
 
+void Imu::injectEvent(ImuEvent e) {
+  emit(e);
+}
+
 void Imu::emit(ImuEvent e) {
   e.millis_ts = millis();
   // Non-blocking — drop oldest if full.
