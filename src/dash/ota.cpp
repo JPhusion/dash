@@ -226,6 +226,10 @@ bool Ota::downloadAndFlash(const String& url, const String& expectedHash) {
     return false;
   }
 
+  // Any leftover state from a previous failed attempt would make
+  // Update.begin reject the new session. Force-abort first so retries
+  // are clean.
+  if (Update.isRunning()) Update.abort();
   if (!Update.begin(len)) {
     log::error(kTag, "Update.begin failed");
     http.end();
@@ -368,7 +372,36 @@ OtaResult Ota::checkAndApply() {
   delay(900);
 
   String hash = "";  // could be fetched from a sibling firmware.bin.sha256 asset
-  if (!downloadAndFlash(assetUrl, hash)) {
+  // Up to 3 attempts at the full download+flash pipeline. TLS handshake
+  // / CDN slow-loris / mid-stream WiFi drops all manifest as a returned
+  // false from downloadAndFlash; rather than bail the user out on the
+  // first transient, we retry. Each attempt: reset Update state (handled
+  // inside downloadAndFlash), reconnect WiFi if dropped, try again.
+  constexpr int kMaxAttempts = 3;
+  bool downloadOk = false;
+  for (int attempt = 1; attempt <= kMaxAttempts && !downloadOk; ++attempt) {
+    if (attempt > 1) {
+      char retryLine[24];
+      snprintf(retryLine, sizeof(retryLine), "Retry %d/%d", attempt, kMaxAttempts);
+      log::warn(kTag, "downloadAndFlash failed, %s", retryLine);
+      display().showText(retryLine, "");
+      delay(1500);
+      if (WiFi.status() != WL_CONNECTED) {
+        log::warn(kTag, "WiFi dropped, reconnecting before retry");
+        WiFi.reconnect();
+        uint32_t deadline = millis() + 15000;
+        while (WiFi.status() != WL_CONNECTED && millis() < deadline) delay(200);
+        if (WiFi.status() != WL_CONNECTED) {
+          log::warn(kTag, "reconnect failed, giving up");
+          break;
+        }
+        esp_wifi_set_ps(WIFI_PS_NONE);
+        delay(500);
+      }
+    }
+    downloadOk = downloadAndFlash(assetUrl, hash);
+  }
+  if (!downloadOk) {
     display().showText("OTA", "Write fail");
     delay(2500);
     display().clearOverlay();
