@@ -80,23 +80,25 @@
   <!-- step 3: taps -->
   <section class="card step" data-step="3" hidden>
     <h3>Taps on my head</h3>
-    <p class="subtle">Tap firmly on the top face. I count how many taps land in a row.</p>
+    <p class="subtle">Tap firmly on my top face. I sense the impulse through the IMU so anywhere on top works — you don't need to hit the cap-touch pad exactly.</p>
     <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
       <div class="settings-row">
-        <div class="label"><span class="name">1 tap</span><span class="hint">friendly chirp — I noticed you</span></div>
+        <div class="label"><span class="name">1 tap</span><span class="hint">friendly chirp + blink — I noticed you</span></div>
         <span style="font-size:22px">👆</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">2 taps fast</span><span class="hint">start a focus session · double-tap again to stop</span></div>
+        <div class="label"><span class="name">2 taps fast</span><span class="hint">start a focus session · double-tap again to end it</span></div>
         <span style="font-size:22px">✌️</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">3 taps fast</span><span class="hint">three-note chime + happy face (no other side effect)</span></div>
+        <div class="label"><span class="name">3 taps fast</span><span class="hint">just a little chime + happy face — no other effect</span></div>
         <span style="font-size:22px">🎵</span>
       </div>
     </div>
     <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
-      Tap timing is mouse-fast — under 300 ms between taps. I ignore impacts that are too hard (knocks, drops) or that come with rotation (flicks, pickups) so taps stay clean.
+      <b>Tap timing</b> is mouse-fast — under 300 ms between taps to count as a chain.<br>
+      <b>Tap filtering</b>: I ignore impacts that are too hard (knocks, drops), too long (sustained shaking), or that come with rotation (flicks, pickups), so accidental taps stay rare.<br>
+      <b>Not for sleeping</b> — three taps used to put me to sleep; now they don't. See the Sleep card.
     </p>
     <div class="btn-row">
       <button class="btn ghost prev">Back</button>
@@ -107,35 +109,35 @@
   <!-- step 4: motion reactions -->
   <section class="card step" data-step="4" hidden>
     <h3>I react when you move me</h3>
-    <p class="subtle">Most motions don't <em>do</em> anything — they're just for fun. Pick me up, spin me, tip me, and watch.</p>
+    <p class="subtle">These are all <em>just for fun</em> — none of them change settings, sessions, or sleep. Pick me up, spin me, tip me, flip me, and watch.</p>
     <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
       <div class="settings-row">
         <div class="label"><span class="name">Shake gently</span><span class="hint">"huh?" face + confused chirp</span></div>
         <span style="font-size:22px">😵‍💫</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Shake hard</span><span class="hint">my eyes go dizzy and swirl</span></div>
+        <div class="label"><span class="name">Shake hard</span><span class="hint">my eyes swirl in a dizzy animation</span></div>
         <span style="font-size:22px">🌀</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Spin me on the desk</span><span class="hint">eyes swirl + dizzy sound</span></div>
+        <div class="label"><span class="name">Spin me on the desk</span><span class="hint">same dizzy reaction</span></div>
         <span style="font-size:22px">🎡</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Tilt me a little</span><span class="hint">my eyes glance that way</span></div>
+        <div class="label"><span class="name">Small tilt</span><span class="hint">eyes glance in the direction you tipped me</span></div>
         <span style="font-size:22px">👀</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Set me on a new face</span><span class="hint">curious "oh?" + eyes drift toward the floor</span></div>
+        <div class="label"><span class="name">Set me on a new face</span><span class="hint">curious "oh?" + eyes drift toward gravity</span></div>
         <span style="font-size:22px">🔄</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Flip me upside-down</span><span class="hint">surprised face + sound — cap-touch pad on the table</span></div>
+        <div class="label"><span class="name">Cap-touch pad on the table</span><span class="hint">surprised face + sound (I'm upside down!)</span></div>
         <span style="font-size:22px">🙃</span>
       </div>
     </div>
     <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
-      None of these change your settings or sessions. They're personality. The two motions that DO matter are covered on the next two cards.
+      These reactions are suppressed while a session is running, during games, in the on-cube menu, and while a diagnostic walkthrough is open in the app — so they don't interfere with what you're actually doing.
     </p>
     <div class="btn-row">
       <button class="btn ghost prev">Back</button>
@@ -173,35 +175,38 @@
   <!-- step 6: face-up tilt menu -->
   <section class="card step" data-step="6" hidden>
     <h3>The face-up menu</h3>
-    <p class="subtle">Set me on the desk with my <b>screen pointing up at the ceiling</b>. After about 2 seconds the menu opens. From here you can launch games <em>and</em> tweak my settings — no phone required.</p>
+    <p class="subtle">Set me on the desk with my <b>screen pointing straight up at the ceiling</b>. After about 2 seconds the menu opens. From here you launch games <em>and</em> tweak my settings — no phone needed.</p>
     <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
       <div class="settings-row">
-        <div class="label"><span class="name">Open</span><span class="hint">screen facing up for ~2 s</span></div>
+        <div class="label"><span class="name">Open</span><span class="hint">screen facing up · hold ~2 s</span></div>
         <span style="font-size:22px">⬆️</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Scroll list</span><span class="hint">tilt me toward you / away from you</span></div>
+        <div class="label"><span class="name">Scroll the list</span><span class="hint">tilt me toward you (down) / away from you (up)</span></div>
         <span style="font-size:22px">↕️</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Select</span><span class="hint">tap my head</span></div>
+        <div class="label"><span class="name">Select / confirm</span><span class="hint">tap my head</span></div>
         <span style="font-size:22px">👆</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Adjust a value</span><span class="hint">tilt left / right · hold to keep going</span></div>
+        <div class="label"><span class="name">Adjust a value</span><span class="hint">tilt left = down, right = up · hold to keep stepping (2 Hz)</span></div>
         <span style="font-size:22px">↔️</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Close</span><span class="hint">just put me down — menu exits after 2 s</span></div>
+        <div class="label"><span class="name">Close</span><span class="hint">just put me down — menu auto-exits after 2 s of not face-up</span></div>
         <span style="font-size:22px">⬇️</span>
       </div>
     </div>
     <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
-      Menu items: <b>Games</b> (Reaction · Bop It), <b>Volume</b>, <b>Session min</b>, <b>Sleep timeout</b>, <b>Tap sens</b>. Tap on Games to open the games submenu; tap on a setting to enter its bar — then tilt left/right to change it. Holding the cube tilted keeps stepping the bar ~2× per second.
+      Items in order: <b>Games</b> → <b>Volume</b> → <b>Session min</b> → <b>Sleep timeout</b> → <b>Tap sens</b>.<br>
+      • Tap on <b>Games</b> to open the games submenu (<b>Reaction</b> or <b>Bop It</b>).<br>
+      • Tap on a setting to enter its slider, then tilt left/right to adjust. Tap again to return to the list.<br>
+      • Putting me down at any depth exits the whole menu — no "Back" needed.
     </p>
     <p class="subtle muted" style="font-size:var(--fs-xs)">
-      <b>Reaction</b>: wait for "GO!" and tap as fast as you can — 5 rounds.<br>
-      <b>Bop It</b>: I show TAP / FLICK / SHAKE — you've got a shrinking window to obey.
+      <b>Reaction</b>: wait for "GO!" and tap as fast as you can — 5 rounds, scored on reaction time.<br>
+      <b>Bop It</b>: I show TAP / FLICK / SHAKE — you've got a shrinking window to do the right move.
     </p>
     <div class="btn-row">
       <button class="btn ghost prev">Back</button>
@@ -212,20 +217,36 @@
   <!-- step 7: sleep / wake -->
   <section class="card step" data-step="7" hidden>
     <h3>Sleep &amp; wake</h3>
-    <p class="subtle">If you leave me alone for ~3 minutes my eyes droop and I doze off to save power.</p>
+    <p class="subtle">When I sleep, my eyes close and the screen blanks out. You can wake me instantly with a shake.</p>
+
     <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
+      <h4 style="margin: 0 0 var(--s-1) 0">How I go to sleep</h4>
       <div class="settings-row">
-        <div class="label"><span class="name">Auto-sleep</span><span class="hint">drowsy → asleep after the configured timeout</span></div>
+        <div class="label"><span class="name">Auto-sleep</span><span class="hint">eyes droop → close after the configured idle timeout (default 3 min)</span></div>
+        <span style="font-size:22px">😴</span>
       </div>
       <div class="settings-row">
-        <div class="label"><span class="name">Sleep on demand</span><span class="hint">flip me so the screen faces the table — hold ~3 s</span></div>
-      </div>
-      <div class="settings-row">
-        <div class="label"><span class="name">Wake me</span><span class="hint">pick me up, or tap the pad</span></div>
+        <div class="label"><span class="name">Manual sleep</span><span class="hint"><b>screen face-down</b> on the table — hold ~3 s</span></div>
+        <span style="font-size:22px">⬇️</span>
       </div>
     </div>
+
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
+      <h4 style="margin: 0 0 var(--s-1) 0">How I wake up</h4>
+      <div class="settings-row">
+        <div class="label"><span class="name">Shake me</span><span class="hint">instant — IMU motion interrupt</span></div>
+        <span style="font-size:22px">🤝</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Tap the cap-touch pad</span><span class="hint">fallback if shake-wake isn't responding</span></div>
+        <span style="font-size:22px">☝️</span>
+      </div>
+    </div>
+
     <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
-      Triple-tap used to be the sleep gesture — it's now just a chime. Sleep is screen-down only so you can't trigger it by accident during a session.
+      <b>Triple-tap doesn't sleep me</b> — only screen-down or auto-sleep does, so you can't put me to sleep by accident during a session.<br>
+      <b>Screen-down ≠ upside-down</b>. Screen-down means the display itself touches the table. Upside-down (cap-touch face on the table) just makes me surprised — see the reactions card.<br>
+      <b>Battery note</b>: I trade some standby current (~0.8 mA) for the shake-to-wake feature. A 2 Ah pack lasts roughly 2–3 days of standby.
     </p>
     <div class="btn-row">
       <button class="btn ghost prev">Back</button>
@@ -281,9 +302,27 @@
   <!-- step 10: done -->
   <section class="card step" data-step="10" hidden>
     <h3>You're set 🎉</h3>
-    <p class="subtle">Try it now: <b>double-tap me</b> to start your first focus session, or <b>set me on my screen-up face</b> for ~2 s to open the on-cube menu.</p>
+    <p class="subtle">A quick recap of the things that actually do something:</p>
+    <div class="col" style="gap: var(--s-2); margin-top: var(--s-3)">
+      <div class="settings-row">
+        <div class="label"><span class="name">Start / end a session</span><span class="hint">double-tap me</span></div>
+        <span style="font-size:22px">✌️</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Open the on-cube menu</span><span class="hint">screen face-up for ~2 s · tilt to navigate, tap to select, put down to exit</span></div>
+        <span style="font-size:22px">⬆️</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Sleep me</span><span class="hint">screen face-down for ~3 s</span></div>
+        <span style="font-size:22px">⬇️</span>
+      </div>
+      <div class="settings-row">
+        <div class="label"><span class="name">Wake me</span><span class="hint">shake me</span></div>
+        <span style="font-size:22px">🤝</span>
+      </div>
+    </div>
     <p class="subtle muted" style="font-size:var(--fs-xs); margin-top: var(--s-3)">
-      Need this list again? Settings → Replay welcome tutorial.
+      Everything else is personality — feel free to poke, spin, tilt, and flip me to see how I react. Need this list again? Settings → Replay welcome tutorial.
     </p>
     <div class="btn-row">
       <button class="btn primary" id="btn-finish">Take me home</button>
