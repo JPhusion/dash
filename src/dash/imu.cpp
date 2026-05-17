@@ -30,10 +30,16 @@ constexpr uint32_t kFaceHoldMs = 250;                      // hysteresis on face
 constexpr float kStationaryGyroThresh = 1.5f;             // deg/s
 constexpr float kStationaryAccelThresh = 0.05f;           // g (linear accel)
 constexpr uint32_t kStationaryHoldMs = 5000;
-// Refractory dropped from 120ms → 50ms so the second tap of a fast
-// double-tap isn't silently dropped.
-constexpr uint32_t kTapRefractoryMs = 50;
-constexpr uint32_t kShakeRefractoryMs = 1500;
+// Tap timing tuned to feel mouse-like:
+// - Refractory 25ms: still rejects post-impact ringing but doesn't gate
+//   a deliberate fast 2nd tap.
+// - Commit-after-quiet 220ms: how long after the LAST tap we wait before
+//   declaring the chain final. A 2-tap chain → DoubleTap at +220ms. A
+//   3rd tap before that resets the timer and we commit as TripleTap
+//   at +220ms after the 3rd.
+constexpr uint32_t kTapRefractoryMs     = 25;
+constexpr uint32_t kTapChainCommitMs    = 220;
+constexpr uint32_t kShakeRefractoryMs   = 1500;
 
 Imu* g_singleton = nullptr;
 
@@ -58,8 +64,8 @@ Imu::Imu()
       lastSampleUs_(0),
       latest_{},
       tapThreshold_(1.5f),
-      doubleTapWindowMs_(400),
-      tripleTapWindowMs_(600),
+      doubleTapWindowMs_(300),
+      tripleTapWindowMs_(550),
       lastTapMs_(0), tapCount_(0), firstTapMs_(0), tapCooldownUntilMs_(0),
       lastLinMag_(0.0f),
       shakeVariance_(0.6f),
@@ -409,14 +415,17 @@ void Imu::sampleLoop() {
           !inShakeWindow &&
           !alongZ &&
           prevQuiet) {
+        // Axis convention is per-cube based on how the IMU is soldered.
+        // For *this* prototype, calibration showed:
+        //   left  → +Y dominant   (lay > 0)
+        //   right → -Y dominant   (lay < 0)
+        // X is unused / cross-axis noise. If a future cube has a
+        // different mounting, run `calibrate` and adjust here.
         Face dir = Face::Unknown;
-        if (fabsf(lax) >= fabsf(lay)) {
-          dir = (lax > 0) ? Face::Right : Face::Left;
+        if (fabsf(lay) >= fabsf(lax)) {
+          dir = (lay > 0) ? Face::Left : Face::Right;
         } else {
-          // +Y body usually means "back" — i.e., toward the user; -Y
-          // means "front" (away). These are arbitrary IMU-mount
-          // conventions; we'll flip in the game if it feels reversed.
-          dir = (lay > 0) ? Face::Back : Face::Front;
+          dir = (lax > 0) ? Face::Front : Face::Back;
         }
         tapCooldownUntilMs_ = nowMs + kTapRefractoryMs;
         emit({ImuEventType::Flick, dir, currentFace_, linMag, 0});
@@ -479,17 +488,25 @@ void Imu::sampleLoop() {
 void Imu::eventLoop() {
   ImuEvent e;
   while (running_) {
-    if (xQueueReceive(eventQueue_, &e, pdMS_TO_TICKS(50)) != pdTRUE) {
-      // Window-based emit: if the tap sequence has expired, classify.
+    // Short poll so the commit check below runs ~50× per second — that's
+    // what lets us fire DoubleTap 220 ms after the 2nd tap instead of
+    // 600 ms.
+    if (xQueueReceive(eventQueue_, &e, pdMS_TO_TICKS(15)) != pdTRUE) {
+      // Idle tick — see if the tap chain is ready to commit. We commit
+      // when no further taps have arrived for kTapChainCommitMs. This
+      // mimics a mouse double-click: the moment we're confident no
+      // 3rd / 4th tap is coming, fire the multi-tap event.
       uint32_t nowMs = millis();
-      if (tapCount_ > 0 && (nowMs - lastTapMs_) > tripleTapWindowMs_) {
-        if (tapCount_ == 2 && (nowMs - firstTapMs_) <= doubleTapWindowMs_ * 2) {
+      if (tapCount_ > 0 && (nowMs - lastTapMs_) > kTapChainCommitMs) {
+        if (tapCount_ == 2) {
           ImuEvent de{ImuEventType::DoubleTap, currentFace_, currentFace_, 0, nowMs};
           for (uint8_t i = 0; i < listenerCount_; i++) listeners_[i](de);
         } else if (tapCount_ >= 3) {
           ImuEvent te{ImuEventType::TripleTap, currentFace_, currentFace_, 0, nowMs};
           for (uint8_t i = 0; i < listenerCount_; i++) listeners_[i](te);
         }
+        // count == 1 → already fired single Tap when it happened; nothing
+        // else to emit on commit.
         tapCount_ = 0;
       }
       continue;

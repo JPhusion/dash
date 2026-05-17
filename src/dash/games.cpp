@@ -14,13 +14,17 @@ namespace {
 constexpr const char* kTag = "Games";
 Games* g_singleton = nullptr;
 
-// Bop It actions:
-//   0 = TAP   (tap on top of cube)
-//   1 = ←    (flick cube left)
-//   2 = →    (flick cube right)
-//   3 = ↑    (flick cube up / away from user)
-//   4 = ↓    (flick cube down / toward user)
-constexpr uint8_t kActionCount = 5;
+// Bop It actions tuned to what this cube's IMU mounting reliably
+// detects (per calibration data):
+//   0 = TAP    (tap on top of cube — body-Z impulse)
+//   1 = ←     (flick the cube to your left  → +Y body)
+//   2 = →     (flick the cube to your right → -Y body)
+//   3 = SHAKE (any vigorous motion — variance trigger)
+//
+// Up / down flicks are intentionally omitted: both produce a -Z
+// signature because the "bounce back" mirrors the initial push,
+// making them indistinguishable from peak data alone.
+constexpr uint8_t kActionCount = 4;
 
 }  // namespace
 
@@ -31,16 +35,14 @@ Games::Games()
 void Games::begin() {
   imu().onEvent([this](const ImuEvent& e) {
     if (current_ == GameId::None) return;
-    // Match the right kind of event for whichever prompt is currently
-    // displayed. Tap is body-Z; flicks are X/Y with the direction in
-    // newFace (Left/Right/Front/Back).
+    // 0 = TAP, 1 = flick left, 2 = flick right, 3 = SHAKE.
     if (e.type == ImuEventType::Tap && expectedAction_ == 0) {
       actionConsumed_ = true;
     } else if (e.type == ImuEventType::Flick) {
       if (expectedAction_ == 1 && e.newFace == Face::Left)  actionConsumed_ = true;
       if (expectedAction_ == 2 && e.newFace == Face::Right) actionConsumed_ = true;
-      if (expectedAction_ == 3 && e.newFace == Face::Front) actionConsumed_ = true;  // "↑"
-      if (expectedAction_ == 4 && e.newFace == Face::Back)  actionConsumed_ = true;  // "↓"
+    } else if (e.type == ImuEventType::Shake && expectedAction_ == 3) {
+      actionConsumed_ = true;
     }
   });
 }
@@ -133,11 +135,10 @@ void Games::runBopIt() {
     // Each prompt is a full-screen visual cue. Tap uses big text "TAP!";
     // the four directional flicks use a large drawn arrow.
     switch (action) {
-      case 0: display().showBig("TAP!");           break;
-      case 1: display().showArrow(ArrowDir::Left); break;
-      case 2: display().showArrow(ArrowDir::Right);break;
-      case 3: display().showArrow(ArrowDir::Up);   break;
-      case 4: display().showArrow(ArrowDir::Down); break;
+      case 0: display().showBig("TAP!");            break;
+      case 1: display().showArrow(ArrowDir::Left);  break;
+      case 2: display().showArrow(ArrowDir::Right); break;
+      case 3: display().showBig("SHAKE!");          break;
     }
     audio().play(sounds::kMenuBlip);
 

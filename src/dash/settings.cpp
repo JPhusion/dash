@@ -73,9 +73,12 @@ void Settings::setSessionLengthMin(uint16_t m) {
 
 float Settings::tapSensitivityG() {
   p_.begin(kNs, true);
-  float v = p_.getFloat("tap_g", 0.5f);
+  // Default 0.3g — calibration on the prototype showed real taps land
+  // around 0.4-1.0g, but soft taps (and the cap-pad-side face) read as
+  // low as 0.37g. 0.5g was excluding real taps.
+  float v = p_.getFloat("tap_g", 0.3f);
   p_.end();
-  if (v < 0.2f) v = 0.2f;
+  if (v < 0.15f) v = 0.15f;
   if (v > 2.0f) v = 2.0f;
   return v;
 }
