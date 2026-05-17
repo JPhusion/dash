@@ -173,25 +173,38 @@ void testCharacter() {
 
 void testImuEvents() {
   section("IMU: synthetic event pipeline");
+  // Inject one at a time with a small settle delay so successive events
+  // don't stack on top of each other's audio cues. Each waitFor* uses a
+  // 1500ms timeout — generous, since some main-loop handlers spawn
+  // deferred tasks before returning to the event loop.
   clearImuFlag();
   imu().injectEvent({ImuEventType::Tap, Face::Up, Face::Up, 1.2f, 0});
-  check(waitForImuEvent("Tap", 800), "Tap dispatched to listener");
+  check(waitForImuEvent("Tap", 1500), "Tap dispatched to listener");
+  vTaskDelay(pdMS_TO_TICKS(150));
 
   clearImuFlag();
   imu().injectEvent({ImuEventType::DoubleTap, Face::Up, Face::Up, 0.0f, 0});
-  check(waitForImuEvent("DoubleTap", 800), "DoubleTap dispatched");
+  check(waitForImuEvent("DoubleTap", 1500), "DoubleTap dispatched");
+  vTaskDelay(pdMS_TO_TICKS(150));
 
   clearImuFlag();
   imu().injectEvent({ImuEventType::TripleTap, Face::Up, Face::Up, 0.0f, 0});
-  check(waitForImuEvent("TripleTap", 800), "TripleTap dispatched");
+  check(waitForImuEvent("TripleTap", 1500), "TripleTap dispatched");
+  vTaskDelay(pdMS_TO_TICKS(200));
 
   clearImuFlag();
   imu().injectEvent({ImuEventType::Shake, Face::Up, Face::Up, 2.0f, 0});
-  check(waitForImuEvent("Shake", 800), "Shake dispatched");
+  check(waitForImuEvent("Shake", 1500), "Shake dispatched");
+  vTaskDelay(pdMS_TO_TICKS(150));
 
   clearImuFlag();
   imu().injectEvent({ImuEventType::OrientationChange, Face::Left, Face::Up, 0.0f, 0});
-  check(waitForImuEvent("OrientationChange", 800), "OrientationChange dispatched");
+  check(waitForImuEvent("OrientationChange", 1500), "OrientationChange dispatched");
+  vTaskDelay(pdMS_TO_TICKS(150));
+
+  clearImuFlag();
+  imu().injectEvent({ImuEventType::Stationary, Face::Up, Face::Up, 0.0f, 0});
+  check(waitForImuEvent("Stationary", 1500), "Stationary dispatched");
 }
 
 void testTouchEvents() {

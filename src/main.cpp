@@ -35,6 +35,42 @@ static uint8_t  g_lastStationCount = 0;
 
 namespace {
 
+// IMU event handlers that involve long animations or sound sequences run
+// the heavy work on a one-shot FreeRTOS task so the IMU event listener
+// chain returns quickly. Otherwise a TripleTap (which plays a 2-second
+// sleep sequence) blocks every subsequent event handler — including
+// the next Tap or Shake — for the duration of the animation.
+namespace deferred {
+
+void sleepSequenceTask(void* /*arg*/) {
+  dash::sounds::play(dash::sounds::kTripleTapAck, true);
+  vTaskDelay(pdMS_TO_TICKS(280));
+  dash::sounds::play(dash::sounds::kSleep, true);
+  dash::character().playSleepAnimation();
+  dash::power().enterDeepSleep(0);
+  vTaskDelete(nullptr);
+}
+
+void sessionStartTask(void* arg) {
+  uint16_t minutes = (uint16_t)(uintptr_t)arg;
+  dash::session().start(minutes);
+  vTaskDelete(nullptr);
+}
+
+void sessionStopTask(void* /*arg*/) {
+  dash::session().stop(false);
+  vTaskDelete(nullptr);
+}
+
+void faceFlipSleepTask(void* /*arg*/) {
+  dash::sounds::play(dash::sounds::kSleep);
+  dash::character().playSleepAnimation();
+  dash::power().enterDeepSleep(0);
+  vTaskDelete(nullptr);
+}
+
+}  // namespace deferred
+
 const char* imuEventName(dash::ImuEventType t) {
   using dash::ImuEventType;
   switch (t) {
@@ -62,15 +98,17 @@ void onImuEvent(const dash::ImuEvent& e) {
       // Distinct two-note chime so the user hears "double-tap detected"
       // separately from the per-tap chirps.
       dash::sounds::play(dash::sounds::kDoubleTapAck, true);
-      // Double-tap toggles a session: starts one at the saved default length
-      // if idle; ends the active one if mid-session. Only when fully
-      // onboarded — first-boot users go through the portal wizard.
+      // Session toggle on a one-shot task so we don't block the imu event
+      // queue with the session-start animation (~700ms of delays).
       if (dash::settings().onboarded()) {
         auto snap = dash::session().snapshot();
         if (snap.active) {
-          dash::session().stop(false);
+          xTaskCreate(&deferred::sessionStopTask, "ses-stop", 4096,
+                      nullptr, 1, nullptr);
         } else {
-          dash::session().start(dash::settings().sessionLengthMin());
+          xTaskCreate(&deferred::sessionStartTask, "ses-start", 4096,
+                      (void*)(uintptr_t)dash::settings().sessionLengthMin(),
+                      1, nullptr);
         }
       } else {
         dash::character().react(dash::EyeState::Surprised, 1200);
@@ -78,12 +116,12 @@ void onImuEvent(const dash::ImuEvent& e) {
       break;
     case ImuEventType::TripleTap:
       dash::log::info("Main", "triple-tap (deep-sleep gesture)");
-      // Distinct triple-tap ack first, then the longer sleep cue.
-      dash::sounds::play(dash::sounds::kTripleTapAck, true);
-      delay(280);
-      dash::sounds::play(dash::sounds::kSleep, true);
-      dash::character().playSleepAnimation();
-      dash::power().enterDeepSleep(0);
+      // Defer the ~2s sleep animation + chime sequence onto its own task
+      // so the imu event listener chain returns immediately. Otherwise a
+      // shake or tap that immediately follows a triple-tap is held up
+      // for the duration of the sleep animation.
+      xTaskCreate(&deferred::sleepSequenceTask, "sleep-seq", 4096,
+                  nullptr, 1, nullptr);
       break;
     case ImuEventType::Shake:
       dash::log::info("Main", "shake (mag=%.2f)", e.magnitude);
@@ -137,9 +175,12 @@ void onTouchEvent(const dash::TouchEvent& e) {
       if (dash::settings().onboarded()) {
         auto snap = dash::session().snapshot();
         if (snap.active) {
-          dash::session().stop(false);
+          xTaskCreate(&deferred::sessionStopTask, "ses-stop", 4096,
+                      nullptr, 1, nullptr);
         } else {
-          dash::session().start(dash::settings().sessionLengthMin());
+          xTaskCreate(&deferred::sessionStartTask, "ses-start", 4096,
+                      (void*)(uintptr_t)dash::settings().sessionLengthMin(),
+                      1, nullptr);
         }
       } else {
         dash::character().react(dash::EyeState::Surprised, 1200);
@@ -148,9 +189,8 @@ void onTouchEvent(const dash::TouchEvent& e) {
     case dash::TouchEventType::LongPress:
       dash::log::info("Main", "long-press → sleep");
       dash::portal().recordDiagEvent("TouchLong");
-      dash::sounds::play(dash::sounds::kSleep);
-      dash::character().playSleepAnimation();
-      dash::power().enterDeepSleep(0);
+      xTaskCreate(&deferred::faceFlipSleepTask, "lp-sleep", 4096,
+                  nullptr, 1, nullptr);
       break;
   }
 }
@@ -272,10 +312,7 @@ void loop() {
       dash::stateMachine().state() != dash::DeviceState::InSession) {
     dash::log::info("Main", "flip-to-sleep gesture -> sleep");
     g_faceDownSinceMs = 0;
-    dash::character().playSleepAnimation();
-    dash::sounds::play(dash::sounds::kSleep);
-    delay(1200);
-    dash::power().enterDeepSleep(0);
+    xTaskCreate(&deferred::faceFlipSleepTask, "flip-sleep", 4096, nullptr, 1, nullptr);
   }
 
   // Show a URL hint on the OLED the moment a phone associates with the AP
